@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>清华大富翁 - 在线版</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    :root{--purple:#660874;--light:#f3e8f9;--bg:#f5f0eb}
+    body{font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg);color:#333;overflow-x:hidden}
+    button{cursor:pointer;font-family:inherit}
+
+    /* ===== LOBBY ===== */
+    .lobby{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:16px}
+    .lobby-box{width:100%;max-width:380px;text-align:center}
+    .lobby-icon{font-size:52px;margin-bottom:4px}
+    .lobby-box h1{font-size:28px;color:var(--purple);letter-spacing:3px}
+    .lobby-box .sub{color:#999;font-size:13px;margin-bottom:24px}
+    .lcard{background:#fff;border-radius:14px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,.06);margin-bottom:12px;text-align:left}
+    .lcard h3{color:var(--purple);font-size:15px;margin-bottom:12px}
+    .lcard input{width:100%;padding:12px 14px;border:2px solid #e8e8e8;border-radius:10px;font-size:15px;margin-bottom:8px;font-family:inherit;outline:none;transition:border .2s}
+    .lcard input:focus{border-color:var(--purple)}
+    .lcard input.code-input{text-transform:uppercase;font-weight:700;letter-spacing:6px;text-align:center;font-size:18px}
+    .lbtn{width:100%;padding:14px;border:none;border-radius:10px;font-size:15px;font-weight:600;color:#fff;background:var(--purple)}
+    .lbtn:active{opacity:.85}
+    .lbtn.sec{background:#ece4f0;color:var(--purple)}
+    .footer-info{margin-top:24px;font-size:11px;color:#bbb;line-height:1.6}
+
+    /* ===== ROOM ===== */
+    .room-view{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:16px}
+    .room-box{width:100%;max-width:400px;text-align:center}
+    .room-box h2{color:var(--purple);font-size:20px;margin-bottom:16px}
+    .code-card{background:#fff;border-radius:14px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,.06);margin-bottom:14px}
+    .code-label{font-size:12px;color:#999;margin-bottom:8px}
+    .code-chars{display:flex;justify-content:center;gap:5px;margin-bottom:10px}
+    .code-char{width:40px;height:48px;background:var(--light);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;color:var(--purple)}
+    .code-copy{background:none;border:1px solid #ddd;padding:6px 14px;border-radius:8px;font-size:12px;color:#888}
+    .plist{background:#fff;border-radius:14px;padding:16px;box-shadow:0 2px 12px rgba(0,0,0,.06);margin-bottom:14px;text-align:left}
+    .plist h4{color:var(--purple);font-size:14px;margin-bottom:10px}
+    .pl-item{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #f0f0f0}
+    .pl-item:last-child{border:none}
+    .pl-dot{width:22px;height:22px;border-radius:50%;flex-shrink:0}
+    .pl-name{flex:1;font-weight:600;font-size:14px}
+    .pl-badge{font-size:10px;background:var(--light);color:var(--purple);padding:2px 8px;border-radius:8px}
+    .pl-wait{color:#ccc;font-size:12px;padding:10px 0;text-align:center}
+    .room-btns{display:flex;gap:8px}
+    .room-btns button{flex:1;padding:14px;border:none;border-radius:10px;font-size:14px;font-weight:600}
+    .btn-go{background:var(--purple);color:#fff}
+    .btn-out{background:#eee;color:#888}
+
+    /* ===== GAME: TOP BAR ===== */
+    .topbar{position:sticky;top:0;z-index:100;background:var(--purple);color:#fff;display:flex;align-items:center;padding:0 12px;height:46px;gap:8px}
+    .topbar .title{font-size:15px;font-weight:700;white-space:nowrap}
+    .topbar .room-tag{font-size:11px;background:rgba(255,255,255,.2);padding:3px 8px;border-radius:5px;letter-spacing:1px}
+    .topbar .spacer{flex:1}
+    .topbar .menu-btn{background:none;border:none;color:#fff;font-size:20px;padding:6px}
+    .dropdown{position:absolute;top:46px;right:0;background:#fff;border-radius:0 0 12px 12px;box-shadow:0 8px 24px rgba(0,0,0,.15);min-width:180px;z-index:101;overflow:hidden}
+    .dropdown button{display:block;width:100%;padding:14px 18px;border:none;background:none;text-align:left;font-size:14px;border-bottom:1px solid #f0f0f0}
+    .dropdown button:active{background:#f5f5f5}
+    .dropdown button:last-child{border:none}
+
+    /* ===== GAME: BOARD ===== */
+    .board-wrap{padding:8px;display:flex;justify-content:center}
+    .board{
+      width:100%;max-width:722px;aspect-ratio:1;
+      display:grid;
+      grid-template-columns:100fr repeat(9,58fr) 100fr;
+      grid-template-rows:100fr repeat(9,58fr) 100fr;
+      border:2px solid #444;background:#cde6d0;
+    }
+    .board-center{grid-column:2/11;grid-row:2/11;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:8px}
+    .board-center .gate{font-size:clamp(28px,8vw,56px)}
+    .board-center h2{font-size:clamp(16px,5vw,32px);color:var(--purple);letter-spacing:4px}
+    .board-center .motto{font-size:clamp(8px,2.5vw,14px);color:#555;letter-spacing:3px;margin-top:4px}
+    .board-center .subtitle{font-size:clamp(6px,1.8vw,10px);color:#888;margin-top:8px;line-height:1.4}
+    .cell{border:1px solid #555;position:relative;overflow:hidden;background:#e8f5e9;display:flex;flex-direction:column}
+    .cell .color-bar{flex-shrink:0}
+    .cell.side-bottom .color-bar{height:clamp(6px,2vw,14px);width:100%}
+    .cell.side-bottom .cell-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
+    .cell.side-top{flex-direction:column-reverse}
+    .cell.side-top .color-bar{height:clamp(6px,2vw,14px);width:100%}
+    .cell.side-top .cell-body{flex:1;display:flex;flex-direction:column-reverse;align-items:center;justify-content:center;gap:1px}
+    .cell.side-left{flex-direction:row-reverse}
+    .cell.side-left .color-bar{width:clamp(6px,2vw,14px);height:100%}
+    .cell.side-left .cell-body{flex:1;display:flex;flex-direction:column-reverse;align-items:center;justify-content:center;writing-mode:vertical-rl;text-orientation:mixed;gap:1px}
+    .cell.side-right{flex-direction:row}
+    .cell.side-right .color-bar{width:clamp(6px,2vw,14px);height:100%}
+    .cell.side-right .cell-body{flex:1;display:flex;flex-direction:column-reverse;align-items:center;justify-content:center;writing-mode:vertical-rl;text-orientation:mixed;gap:1px}
+    .cell .cell-icon{font-size:clamp(6px,1.8vw,13px);line-height:1}
+    .cell .cell-name{font-size:clamp(4px,1.1vw,8px);font-weight:600;line-height:1.1;text-align:center}
+    .cell .cell-price{font-size:clamp(3px,0.9vw,7px);color:#555}
+    .cell.corner{display:flex;flex-direction:column;align-items:center;justify-content:center;background:#d4edda;text-align:center}
+    .cell.corner .cell-icon{font-size:clamp(10px,3vw,20px)}
+    .cell.corner .cell-name{font-size:clamp(5px,1.3vw,9px);font-weight:700}
+    .cell.type-go{background:#d4edda}.cell.type-jail{background:#f0e0d0}.cell.type-parking{background:#ffe0e8}
+    .cell.type-gotojail{background:#ffd0d0}.cell.type-tax{background:#f5f5dc}.cell.type-chance{background:#fff3cd}
+    .cell.type-chest{background:#d1ecf1}.cell.type-railroad{background:#e2e3e5}.cell.type-utility{background:#e2e3e5}
+    .cell .tokens{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap;z-index:2;line-height:1;pointer-events:none}
+    .cell .tokens .tk{font-size:clamp(14px,5vw,40px)}
+
+    /* ===== GAME: CONTROLS ===== */
+    .controls{max-width:640px;margin:0 auto;padding:8px 12px 20px}
+    .turn-banner{background:var(--purple);color:#fff;text-align:center;padding:10px;border-radius:10px;font-size:14px;font-weight:600;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+    .turn-banner .round{font-size:11px;opacity:.7}
+    .turn-banner button{background:rgba(255,255,255,.2);color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px}
+    .dice-box{background:#fff;border-radius:12px;padding:16px;text-align:center;margin-bottom:10px;box-shadow:0 1px 6px rgba(0,0,0,.05)}
+    .dice-row{display:flex;justify-content:center;gap:12px;margin:10px 0}
+    .die{width:48px;height:48px;background:#fff;border:3px solid #333;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700}
+    .die.rolling{animation:shake .15s infinite alternate}
+    @keyframes shake{0%{transform:rotate(-8deg) scale(1.05)}100%{transform:rotate(8deg) scale(1.05)}}
+    .dice-result{font-size:12px;color:#888;margin-bottom:8px}
+    .btn-roll{background:#e74c3c;color:#fff;border:none;padding:12px 0;border-radius:10px;font-size:16px;font-weight:700;width:100%}
+    .btn-roll:active{background:#c0392b}
+
+    .player-card{background:#fff;border-radius:12px;padding:12px;box-shadow:0 1px 6px rgba(0,0,0,.05);margin-bottom:8px;border-left:5px solid #ccc}
+    .player-card.is-me{box-shadow:0 0 0 2px var(--purple)}
+    .player-card.on-turn{background:#fffbe6}
+    .pc-top{display:flex;justify-content:space-between;align-items:center}
+    .pc-name{font-weight:700;font-size:14px}
+    .pc-money{font-size:18px;font-weight:800;color:#27ae60}
+    .pc-money.negative{color:#e74c3c}
+    .pc-pos{font-size:11px;color:#999;margin:4px 0}
+    .pc-props{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:6px}
+    .pc-dot{width:14px;height:9px;border-radius:2px;border:1px solid rgba(0,0,0,.15)}
+    .pc-emoji{font-size:16px;margin-right:4px}
+
+    .log-box{background:#fff;border-radius:12px;padding:12px;box-shadow:0 1px 6px rgba(0,0,0,.05);margin-bottom:10px;max-height:160px;overflow-y:auto}
+    .log-box h4{font-size:13px;color:var(--purple);margin-bottom:6px}
+    .log-entry{font-size:11px;padding:3px 0;border-bottom:1px solid #f7f7f7;color:#666}
+
+    .game-footer{text-align:center;padding:20px 12px 30px;font-size:11px;color:#bbb;line-height:1.7}
+    .game-footer a{color:var(--purple);text-decoration:none}
+
+    /* ===== CHAT ===== */
+    .chat-toggle{position:fixed;bottom:16px;right:16px;width:48px;height:48px;border-radius:50%;background:var(--purple);color:#fff;border:none;font-size:20px;box-shadow:0 4px 14px rgba(0,0,0,.2);z-index:120;display:none}
+    .chat-toggle .badge{position:absolute;top:-2px;right:-2px;min-width:18px;height:18px;background:#e74c3c;border-radius:9px;font-size:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;padding:0 4px}
+    .chat-panel{position:fixed;bottom:72px;right:12px;width:min(320px,calc(100vw - 24px));max-height:360px;background:#fff;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.15);z-index:120;display:flex;flex-direction:column;overflow:hidden}
+    .chat-head{background:var(--purple);color:#fff;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:14px}
+    .chat-head button{background:none;border:none;color:#fff;font-size:18px}
+    .chat-msgs{flex:1;overflow-y:auto;padding:10px;max-height:230px}
+    .chat-msg{margin-bottom:6px}
+    .cm-name{font-size:10px;font-weight:600;margin-bottom:1px}
+    .cm-text{font-size:12px;background:#f3f3f3;padding:5px 10px;border-radius:8px;display:inline-block;max-width:85%;word-break:break-all}
+    .chat-bar{display:flex;gap:6px;padding:8px;border-top:1px solid #eee}
+    .chat-bar input{flex:1;padding:8px 10px;border:2px solid #e8e8e8;border-radius:8px;font-size:13px;font-family:inherit;outline:none}
+    .chat-bar input:focus{border-color:var(--purple)}
+    .chat-bar button{background:var(--purple);color:#fff;border:none;padding:8px 14px;border-radius:8px;font-size:13px}
+
+    /* ===== OVERLAYS ===== */
+    .overlay{position:fixed;top:0;left:0;right:0;bottom:0;z-index:200;background:var(--bg);overflow-y:auto;display:none}
+    .overlay.show{display:block}
+    .ov-bar{position:sticky;top:0;background:var(--purple);color:#fff;display:flex;align-items:center;padding:0 14px;height:46px;gap:10px;z-index:1}
+    .ov-bar h3{font-size:16px;flex:1}
+    .ov-bar button{background:none;border:none;color:#fff;font-size:20px}
+    .ov-body{padding:16px;max-width:800px;margin:0 auto}
+    .deed-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
+    .deed-card{border:2px solid #444;border-radius:8px;padding:8px;background:#fff;font-size:10px}
+    .deed-card .dc-color{height:16px;border-radius:3px;margin-bottom:4px}
+    .deed-card .dc-name{text-align:center;font-size:13px;font-weight:700;margin-bottom:4px}
+    .deed-card .dc-sub{text-align:center;font-size:8px;color:#999;margin-bottom:3px}
+    .deed-card hr{border:none;border-top:1px solid #ddd;margin:3px 0}
+    .deed-card .dc-row{display:flex;justify-content:space-between;padding:1px 0;font-size:10px}
+    .event-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:16px}
+    .event-card{border:2px solid #444;border-radius:8px;padding:10px;text-align:center;font-size:11px;line-height:1.4}
+    .event-card.chance{background:#fff9e6;border-color:#e0a800}
+    .event-card.chest{background:#e8f4fd;border-color:#4ab0d5}
+    .event-card .ev-title{font-weight:700;font-size:11px;margin-bottom:4px}
+
+    .rules-body{max-width:600px;margin:0 auto;line-height:1.8;font-size:13px}
+    .rules-body h3{color:var(--purple);margin:16px 0 4px;border-bottom:2px solid var(--purple);padding-bottom:2px;font-size:15px}
+    .rules-body ul{padding-left:18px;margin-bottom:8px}
+
+    /* ===== MODAL ===== */
+    .modal-bg{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);z-index:300;align-items:center;justify-content:center;padding:16px}
+    .modal-bg.show{display:flex}
+    .modal{background:#fff;border-radius:14px;padding:22px;width:100%;max-width:380px}
+    .modal h3{color:var(--purple);margin-bottom:12px;font-size:16px}
+    .modal label{display:block;font-size:11px;color:#888;margin:8px 0 3px}
+    .modal select,.modal input{width:100%;padding:10px 12px;border:2px solid #e8e8e8;border-radius:8px;font-size:14px;font-family:inherit;outline:none}
+    .modal select:focus,.modal input:focus{border-color:var(--purple)}
+    .modal-btns{display:flex;gap:8px;margin-top:16px}
+    .modal-btns button{flex:1;padding:12px;border-radius:8px;font-size:14px;border:none;font-weight:600}
+    .modal-btns .mc{background:#eee;color:#666}
+    .modal-btns .mo{background:var(--purple);color:#fff}
+
+    /* ===== PRINT ===== */
+    @media print{
+      body>*{display:none!important}
+      #view-game{display:block!important}
+      .topbar,.controls,.chat-toggle,.chat-panel,.dropdown,.game-footer{display:none!important}
+      .board-wrap{padding:0}
+      .board{max-width:none;width:260mm;height:260mm;border-width:2px;
+        grid-template-columns:36.1mm repeat(9,20.9mm) 36.1mm;
+        grid-template-rows:36.1mm repeat(9,20.9mm) 36.1mm}
+      .cell .cell-name{font-size:8pt}.cell .cell-price{font-size:7pt}.cell .cell-icon{font-size:11pt}
+      .cell.corner .cell-icon{font-size:17pt}.cell.corner .cell-name{font-size:8pt}
+      .cell .color-bar{height:4mm!important;width:4mm!important}
+      .board-center h2{font-size:30pt}.board-center .gate{font-size:40pt}
+      @page{size:A3 landscape;margin:10mm}
+    }
+  </style>
+</head>
+<body>
+
+<!-- ==================== LOBBY ==================== -->
+<div id="view-lobby" class="lobby">
+  <div class="lobby-box">
+    <div class="lobby-icon">🏛️</div>
+    <h1>清华大富翁</h1>
+    <p class="sub">在线版 · 和好友一起玩</p>
+    <div class="lcard">
+      <h3>创建房间</h3>
+      <input id="inp-cname" type="text" placeholder="你的名字" maxlength="10">
+      <button class="lbtn" onclick="createRoom()">创建房间</button>
+    </div>
+    <div class="lcard">
+      <h3>加入房间</h3>
+      <input id="inp-jcode" class="code-input" type="text" placeholder="房间代码" maxlength="6">
+      <input id="inp-jname" type="text" placeholder="你的名字" maxlength="10">
+      <button class="lbtn sec" onclick="joinRoom()">加入房间</button>
+    </div>
+    <div class="footer-info">
+      作者：子路 · 微信：REBL_unofficial<br>
+      <span id="connStatus" style="font-size:10px">连接中...</span>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== ROOM ==================== -->
+<div id="view-room" style="display:none" class="room-view">
+  <div class="room-box">
+    <h2>等待玩家加入</h2>
+    <div class="code-card">
+      <div class="code-label">把代码发给好友</div>
+      <div class="code-chars" id="codeChars"></div>
+      <button class="code-copy" onclick="copyCode()">点击复制代码</button>
+    </div>
+    <div class="plist">
+      <h4>玩家 <span id="plCount">0</span>/6</h4>
+      <div id="roomPlayers"></div>
+    </div>
+    <div class="room-btns">
+      <button class="btn-go" id="btnStart" onclick="emitStart()">开始游戏</button>
+      <button class="btn-out" onclick="emitLeave()">离开</button>
+    </div>
+    <div class="footer-info" style="margin-top:16px">作者：子路 · 微信：REBL_unofficial</div>
+  </div>
+</div>
+
+<!-- ==================== GAME ==================== -->
+<div id="view-game" style="display:none">
+  <!-- Top bar -->
+  <div class="topbar">
+    <span class="title">清华大富翁</span>
+    <span class="room-tag" id="gRoomCode">---</span>
+    <div class="spacer"></div>
+    <button class="menu-btn" onclick="toggleMenu()">☰</button>
+  </div>
+  <div class="dropdown" id="dropMenu" style="display:none">
+    <button onclick="showCustom()">✏️ 自定义金额</button>
+    <button onclick="openOverlay('cards')">🃏 地产卡 / 事件卡</button>
+    <button onclick="openOverlay('rules')">📖 游戏规则</button>
+    <button onclick="printBoard()">🖨️ 打印棋盘</button>
+    <button onclick="emitLeave()">🚪 离开房间</button>
+  </div>
+
+  <!-- Board -->
+  <div class="board-wrap">
+    <div class="board" id="board">
+      <div class="board-center">
+        <div class="gate">🏛️</div>
+        <h2>清华大富翁</h2>
+        <div class="motto">自强不息 厚德载物</div>
+        <div class="subtitle">TSINGHUA MONOPOLY<br>经过起点收取 ¥2000</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <!-- Turn -->
+    <div class="turn-banner">
+      <div><span id="turnName">--</span><span class="round" id="roundText"> · 第 1 回合</span></div>
+    </div>
+
+    <!-- Dice -->
+    <div class="dice-box">
+      <div class="dice-row"><div class="die" id="die1">?</div><div class="die" id="die2">?</div></div>
+      <div class="dice-result" id="diceResult">点击掷骰子</div>
+      <button class="btn-roll" onclick="emitRoll()">掷骰子 🎲</button>
+    </div>
+
+    <!-- Players -->
+    <div id="playersArea"></div>
+
+    <!-- Log -->
+    <div class="log-box"><h4>游戏记录</h4><div id="logList"></div></div>
+
+    <!-- Footer -->
+    <div class="game-footer">
+      作者：<b>子路</b> · 微信：<b>REBL_unofficial</b><br>有反馈欢迎联系
+    </div>
+  </div>
+
+  <!-- Chat -->
+  <button class="chat-toggle" id="chatToggle" onclick="toggleChat()">💬<span class="badge" id="chatBadge" style="display:none">0</span></button>
+  <div class="chat-panel" id="chatPanel" style="display:none">
+    <div class="chat-head"><span>聊天</span><button onclick="toggleChat()">✕</button></div>
+    <div class="chat-msgs" id="chatMsgs"></div>
+    <div class="chat-bar">
+      <input id="chatInput" maxlength="200" placeholder="说点什么..." onkeydown="if(event.key==='Enter')sendChat()">
+      <button onclick="sendChat()">发送</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== OVERLAYS ==================== -->
+<div class="overlay" id="ov-cards">
+  <div class="ov-bar"><h3>卡牌</h3><button onclick="closeOverlay('cards')">✕</button></div>
+  <div class="ov-body">
+    <h3 style="color:var(--purple);margin-bottom:8px">地产卡</h3>
+    <div class="deed-grid" id="deedGrid"></div>
+    <h3 style="color:var(--purple);margin:16px 0 8px">学生会通知（机会卡）</h3>
+    <div class="event-grid" id="chanceGrid"></div>
+    <h3 style="color:var(--purple);margin:16px 0 8px">奖学金（公共基金卡）</h3>
+    <div class="event-grid" id="chestGrid"></div>
+  </div>
+</div>
+<div class="overlay" id="ov-rules">
+  <div class="ov-bar"><h3>游戏规则</h3><button onclick="closeOverlay('rules')">✕</button></div>
+  <div class="ov-body rules-body">
+    <h3>游戏简介</h3><p>清华大富翁是以清华大学为主题的桌游，2~6名玩家在清华校园中购买地产、收取租金，成为最后的"清华首富"！</p>
+    <h3>游戏准备</h3><ul><li>打印棋盘（建议A3彩色）</li><li>准备骰子两颗（或用在线掷骰子）</li><li>准备棋子（硬币、橡皮等均可）</li><li>每人起始资金 ¥15,000</li></ul>
+    <h3>基本规则</h3><ul><li><b>掷骰子前进</b>：每回合掷两颗骰子，按点数前进</li><li><b>经过/到达起点</b>：收取 ¥2,000</li><li><b>购买地产</b>：到达无主地产可按标价购买</li><li><b>收取租金</b>：到达他人地产需支付租金</li><li><b>升级地产</b>：集齐同色后可花钱升级，租金大幅提升</li><li><b>校门</b>：1个¥250 / 2个¥500 / 3个¥1000 / 4个¥2000</li><li><b>校园网/校园卡</b>：骰子×4（1个）或×10（2个）</li></ul>
+    <h3>特殊格子</h3><ul><li><b>学生会通知/奖学金</b>：抽卡执行</li><li><b>缴学费</b>：-¥2,000 / <b>交书本费</b>：-¥1,000</li><li><b>挂科补考（监狱）</b>：掷双数或付¥500出狱</li><li><b>被辅导员约谈</b>：直接进监狱</li><li><b>情人坡</b>：安全休息</li></ul>
+    <h3>胜利条件</h3><p>最后一名未破产的玩家获胜，或约定时间后资产最多者获胜。</p>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-bg" id="modalBg"><div class="modal" id="modalBox"></div></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+// ===== DATA =====
+const S=[
+  {id:0,n:'入学报到',t:'go',i:'🎓'},
+  {id:1,n:'紫荆园',t:'property',g:'brown',p:600,bc:500,r:[20,100,300,900,1600,2500],i:'🍜'},
+  {id:2,n:'奖学金',t:'chest',i:'💰'},
+  {id:3,n:'清芬园',t:'property',g:'brown',p:600,bc:500,r:[40,200,600,1800,3200,4500],i:'🍛'},
+  {id:4,n:'缴学费',t:'tax',a:2000,i:'💸'},
+  {id:5,n:'东门',t:'railroad',p:2000,i:'🚪'},
+  {id:6,n:'桃李园',t:'property',g:'lightblue',p:1000,bc:500,r:[60,300,900,2700,4000,5500],i:'🍱'},
+  {id:7,n:'学生会通知',t:'chance',i:'📋'},
+  {id:8,n:'听涛园',t:'property',g:'lightblue',p:1000,bc:500,r:[60,300,900,2700,4000,5500],i:'🍲'},
+  {id:9,n:'芝兰园',t:'property',g:'lightblue',p:1200,bc:500,r:[80,400,1000,3000,4500,6000],i:'🥘'},
+  {id:10,n:'挂科补考',t:'jail',i:'📝'},
+  {id:11,n:'六教',t:'property',g:'pink',p:1400,bc:1000,r:[100,500,1500,4500,6250,7500],i:'📚'},
+  {id:12,n:'校园网',t:'utility',p:1500,i:'📶'},
+  {id:13,n:'四教',t:'property',g:'pink',p:1400,bc:1000,r:[100,500,1500,4500,6250,7500],i:'🏫'},
+  {id:14,n:'三教',t:'property',g:'pink',p:1600,bc:1000,r:[120,600,1800,5000,7000,9000],i:'🎒'},
+  {id:15,n:'南门',t:'railroad',p:2000,i:'🚪'},
+  {id:16,n:'西操',t:'property',g:'orange',p:1800,bc:1000,r:[140,700,2000,5500,7500,9500],i:'⚽'},
+  {id:17,n:'奖学金',t:'chest',i:'💰'},
+  {id:18,n:'东操',t:'property',g:'orange',p:1800,bc:1000,r:[140,700,2000,5500,7500,9500],i:'🏀'},
+  {id:19,n:'综合体育馆',t:'property',g:'orange',p:2000,bc:1000,r:[160,800,2200,6000,8000,10000],i:'🏟️'},
+  {id:20,n:'情人坡',t:'parking',i:'💕'},
+  {id:21,n:'图书馆',t:'property',g:'red',p:2200,bc:1500,r:[180,900,2500,7000,8750,10500],i:'📖'},
+  {id:22,n:'学生会通知',t:'chance',i:'📋'},
+  {id:23,n:'美术学院',t:'property',g:'red',p:2200,bc:1500,r:[180,900,2500,7000,8750,10500],i:'🎨'},
+  {id:24,n:'FIT楼',t:'property',g:'red',p:2400,bc:1500,r:[200,1000,3000,7500,9250,11000],i:'💻'},
+  {id:25,n:'西门',t:'railroad',p:2000,i:'🚪'},
+  {id:26,n:'大礼堂',t:'property',g:'yellow',p:2600,bc:1500,r:[220,1100,3300,8000,9750,11500],i:'🏛️'},
+  {id:27,n:'新清华学堂',t:'property',g:'yellow',p:2600,bc:1500,r:[220,1100,3300,8000,9750,11500],i:'🎭'},
+  {id:28,n:'校园卡',t:'utility',p:1500,i:'💳'},
+  {id:29,n:'蒙民伟音乐厅',t:'property',g:'yellow',p:2800,bc:1500,r:[240,1200,3600,8500,10250,12000],i:'🎵'},
+  {id:30,n:'被辅导员约谈',t:'gotojail',i:'😱'},
+  {id:31,n:'主楼',t:'property',g:'green',p:3000,bc:2000,r:[260,1300,3900,9000,11000,12750],i:'🏢'},
+  {id:32,n:'工字厅',t:'property',g:'green',p:3000,bc:2000,r:[260,1300,3900,9000,11000,12750],i:'🏯'},
+  {id:33,n:'奖学金',t:'chest',i:'💰'},
+  {id:34,n:'近春园',t:'property',g:'green',p:3200,bc:2000,r:[280,1500,4500,10000,12000,14000],i:'🌸'},
+  {id:35,n:'北门',t:'railroad',p:2000,i:'🚪'},
+  {id:36,n:'学生会通知',t:'chance',i:'📋'},
+  {id:37,n:'苏世民书院',t:'property',g:'darkblue',p:3500,bc:2000,r:[350,1750,5000,11000,13000,15000],i:'🌍'},
+  {id:38,n:'交书本费',t:'tax',a:1000,i:'📕'},
+  {id:39,n:'二校门',t:'property',g:'darkblue',p:4000,bc:2000,r:[500,2000,6000,14000,17000,20000],i:'⛩️'},
+];
+const GC={brown:'#8B4513',lightblue:'#87CEEB',pink:'#DB7093',orange:'#FF8C00',red:'#DC143C',yellow:'#FFD700',green:'#228B22',darkblue:'#191970'};
+const GN={brown:'食堂区(棕)',lightblue:'食堂区(蓝)',pink:'教学楼(粉)',orange:'运动场(橙)',red:'学术楼(红)',yellow:'文化场馆(黄)',green:'历史名胜(绿)',darkblue:'标志建筑(蓝)'};
+const CHANCE=[
+  '获得"国家奖学金"！收取 ¥8,000','在"挑战杯"中获奖，收取 ¥3,000','自行车被偷了，支付 ¥500 买新车',
+  '论文发表在 Nature 上！收取 ¥5,000','被选为学生会主席，每位玩家向你支付 ¥500','食堂饭卡充值故障，支付 ¥200',
+  '获得出国交换机会，前进到起点收取 ¥2,000','宿舍违规用电被抓，支付 ¥1,000','获得创业大赛奖金，收取 ¥4,000','期末复习太累进了校医院，支付 ¥800',
+];
+const CHEST=[
+  '获得"一二·九"奖学金，收取 ¥2,000','助教工资到账，收取 ¥1,500','实验设备损坏，赔偿 ¥2,000',
+  '银行转账错误，多收到 ¥1,000','生日快乐！每位玩家向你支付 ¥100','校医院看病，支付 ¥500',
+  '科研项目经费到账，收取 ¥3,000','电脑坏了需要维修，支付 ¥800','获得企业赞助，收取 ¥2,500','前往起点，收取 ¥2,000',
+];
+
+const EMOJIS=['👧🏻','👦🏽','👩🏿','🧑🏼','👸🏾','🤴🏻'];
+
+// ===== SOCKET =====
+const socket = io();
+let room = null, myId = null, animating = false, chatOpen = false, unread = 0, menuOpen = false;
+
+socket.on('connect', () => { myId = socket.id; document.getElementById('connStatus').textContent = '已连接 ✓'; });
+socket.on('disconnect', () => { document.getElementById('connStatus').textContent = '连接断开，重连中...'; });
+socket.on('error-msg', m => alert(m));
+socket.on('room-update', d => { room = d; refresh(); });
+socket.on('dice-rolled', ({ dice, playerIndex, from, to }) => diceAnim(dice, playerIndex, from, to));
+socket.on('chat-msg', ({ from, text, color }) => {
+  addBubble(from, text, color);
+  if (!chatOpen) { unread++; const b=document.getElementById('chatBadge'); b.textContent=unread; b.style.display=''; }
+});
+
+// ===== VIEWS =====
+function refresh() {
+  if (!room) { show('lobby'); return; }
+  if (!room.started) { show('room'); renderRoom(); return; }
+  show('game'); renderGame();
+}
+function show(v) {
+  ['lobby','room','game'].forEach(n => document.getElementById('view-'+n).style.display = n===v ? '' : 'none');
+  if (v==='game') document.getElementById('chatToggle').style.display = 'flex';
+}
+
+// ===== LOBBY =====
+function createRoom() {
+  const n = document.getElementById('inp-cname').value.trim(); if(!n) return;
+  socket.emit('create-room', { name: n });
+}
+function joinRoom() {
+  const c = document.getElementById('inp-jcode').value.trim();
+  const n = document.getElementById('inp-jname').value.trim();
+  if(!c||!n) return;
+  socket.emit('join-room', { code: c, name: n });
+}
+document.getElementById('inp-cname').onkeydown = e => { if(e.key==='Enter') createRoom(); };
+document.getElementById('inp-jcode').onkeydown = e => { if(e.key==='Enter') document.getElementById('inp-jname').focus(); };
+document.getElementById('inp-jname').onkeydown = e => { if(e.key==='Enter') joinRoom(); };
+
+// ===== ROOM =====
+function renderRoom() {
+  document.getElementById('codeChars').innerHTML = room.code.split('').map(c=>`<div class="code-char">${c}</div>`).join('');
+  document.getElementById('plCount').textContent = room.players.length;
+  const list = document.getElementById('roomPlayers');
+  list.innerHTML = room.players.map(p=>`<div class="pl-item"><div class="pl-dot" style="background:${p.color}"></div><span class="pl-name">${p.name}</span>${p.id===room.hostId?'<span class="pl-badge">房主</span>':''}</div>`).join('');
+  if (room.players.length < 6) list.innerHTML += '<div class="pl-wait">等待更多玩家加入...</div>';
+  document.getElementById('btnStart').style.display = myId===room.hostId ? '' : 'none';
+}
+function copyCode() {
+  navigator.clipboard.writeText(room.code).then(()=>{
+    const b=document.querySelector('.code-copy'); b.textContent='已复制!'; setTimeout(()=>b.textContent='点击复制代码',1200);
+  });
+}
+function emitStart() { socket.emit('start-game'); }
+function emitLeave() { socket.emit('leave-room'); room=null; closeMenu(); show('lobby'); }
+
+// ===== GAME =====
+function renderGame() {
+  document.getElementById('gRoomCode').textContent = room.code;
+  const cp = room.players[room.currentTurn]; if(!cp) return;
+  document.getElementById('turnName').textContent = cp.name + ' 的回合';
+  document.getElementById('roundText').textContent = ' · 第 ' + room.round + ' 回合';
+  const mi = room.players.findIndex(p => p.id === myId);
+
+  if (!animating && room.lastDice[0]>0) {
+    const df=['','⚀','⚁','⚂','⚃','⚄','⚅'];
+    document.getElementById('die1').textContent=df[room.lastDice[0]];
+    document.getElementById('die2').textContent=df[room.lastDice[1]];
+    const t=room.lastDice[0]+room.lastDice[1];
+    document.getElementById('diceResult').textContent=`${room.lastDice[0]} + ${room.lastDice[1]} = ${t}`;
+  }
+
+  // Players
+  const area = document.getElementById('playersArea');
+  area.innerHTML = '';
+  room.players.forEach((p, i) => {
+    if (p.disconnected) return;
+    const isMe = i===mi, isTurn = i===room.currentTurn;
+    const emoji = EMOJIS[i % EMOJIS.length];
+    const owned = Object.entries(room.properties).filter(([_,v])=>v.owner===i).map(([sid])=>S[+sid]);
+    const dots = owned.map(sp=>{const c=sp.g?GC[sp.g]:'#888';return `<div class="pc-dot" style="background:${c}" title="${sp.n}"></div>`;}).join('');
+    const posN = S[p.position]?.n || '起点';
+    const card = document.createElement('div');
+    card.className = `player-card${isMe?' is-me':''}${isTurn?' on-turn':''}`;
+    card.style.borderLeftColor = p.color;
+    card.innerHTML = `
+      <div class="pc-top"><span class="pc-name" style="color:${p.color}"><span class="pc-emoji">${emoji}</span>${p.name}${isMe?' (我)':''}</span><span class="pc-money${p.money<0?' negative':''}">${p.money<0?'-':''}¥${Math.abs(p.money).toLocaleString()}</span></div>
+      <div class="pc-pos">📍 ${posN}${p.bankrupt?' · 已破产':''}</div>
+      <div class="pc-props">${dots||'<span style="font-size:10px;color:#ccc">暂无地产</span>'}</div>`;
+    area.appendChild(card);
+  });
+
+  // Tokens on board (skip during step animation)
+  if(!animating) updateTokens();
+
+  // Log
+  document.getElementById('logList').innerHTML = room.log.slice(-20).reverse().map(l=>`<div class="log-entry">${l}</div>`).join('');
+}
+
+function updateTokens(){
+  document.querySelectorAll('.cell .tokens').forEach(t=>t.innerHTML='');
+  if(!room) return;
+  room.players.forEach((p,i)=>{
+    if(p.disconnected||p.bankrupt) return;
+    const cell=document.querySelector(`.cell[data-space="${p.position}"] .tokens`);
+    if(!cell) return;
+    const tk=document.createElement('span');
+    tk.className='tk';
+    tk.textContent=EMOJIS[i % EMOJIS.length];
+    cell.appendChild(tk);
+  });
+}
+
+// ===== DICE =====
+function diceAnim(dice, pi, from, to) {
+  animating=true;
+  const [d1,d2]=dice, df=['','⚀','⚁','⚂','⚃','⚄','⚅'];
+  const e1=document.getElementById('die1'),e2=document.getElementById('die2');
+  e1.classList.add('rolling'); e2.classList.add('rolling');
+  let c=0;
+  const iv=setInterval(()=>{
+    e1.textContent=df[Math.floor(Math.random()*6)+1];
+    e2.textContent=df[Math.floor(Math.random()*6)+1];
+    if(++c>10){
+      clearInterval(iv);
+      e1.textContent=df[d1]; e2.textContent=df[d2];
+      e1.classList.remove('rolling'); e2.classList.remove('rolling');
+      document.getElementById('diceResult').textContent=`${d1} + ${d2} = ${d1+d2}${d1===d2?' 双数!':''}`;
+      // Step-by-step movement
+      if(pi!==undefined && from!==undefined && to!==undefined){
+        stepMove(pi, from, to, ()=>{ animating=false; updateTokens(); if(!checkAutoBuy()) autoEndTurn(); });
+      } else {
+        animating=false; updateTokens(); autoEndTurn();
+      }
+    }
+  },70);
+}
+
+function stepMove(pi, from, to, cb){
+  const steps=[];
+  let pos=from;
+  while(pos!==to){ pos=(pos+1)%40; steps.push(pos); }
+  // Temporarily override the moving player's displayed position
+  room.players[pi].position = from;
+  updateTokens();
+  let idx=0;
+  function nextStep(){
+    document.querySelectorAll('.cell').forEach(c=>c.style.outline='');
+    if(idx>=steps.length){ cb(); return; }
+    room.players[pi].position = steps[idx];
+    updateTokens();
+    const cell=document.querySelector(`.cell[data-space="${steps[idx]}"]`);
+    if(cell) cell.style.outline='2px solid #e74c3c';
+    idx++;
+    setTimeout(nextStep, 300);
+  }
+  setTimeout(nextStep, 300);
+}
+
+// ===== EMITS =====
+function emitRoll(){ socket.emit('roll-dice'); }
+function autoEndTurn(){ setTimeout(()=>{ lastBuyPromptPos=-1; socket.emit('end-turn'); }, 800); }
+
+// ===== MENU =====
+function toggleMenu(){ menuOpen=!menuOpen; document.getElementById('dropMenu').style.display=menuOpen?'':'none'; }
+function closeMenu(){ menuOpen=false; document.getElementById('dropMenu').style.display='none'; }
+document.addEventListener('click',e=>{ if(menuOpen && !e.target.closest('.dropdown') && !e.target.closest('.menu-btn')) closeMenu(); });
+
+// ===== MODALS =====
+function showModal(h){ document.getElementById('modalBox').innerHTML=h; document.getElementById('modalBg').classList.add('show'); closeMenu(); }
+function hideModal(){ document.getElementById('modalBg').classList.remove('show'); }
+document.getElementById('modalBg').onclick=e=>{if(e.target===e.currentTarget)hideModal();};
+
+let lastBuyPromptPos = -1;
+function checkAutoBuy(){
+  if(!room||!room.started) return false;
+  const ci=room.currentTurn;
+  const p=room.players[ci];
+  if(!p||p.disconnected||p.bankrupt) return false;
+  const sp=S[p.position];
+  if(!sp||!['property','railroad','utility'].includes(sp.t)) return false;
+  if(room.properties[sp.id]) return false;
+  if(lastBuyPromptPos===p.position) return false;
+  lastBuyPromptPos=p.position;
+  const emoji=EMOJIS[ci%EMOJIS.length];
+  showModal(`<h3>🏠 购买地产</h3><p style="margin:8px 0">${emoji} <b>${p.name}</b> 到达了 <b>${sp.i} ${sp.n}</b></p><p style="font-size:18px;font-weight:700;color:var(--purple);margin:8px 0">¥${sp.p.toLocaleString()}</p><p style="font-size:12px;color:#888">当前余额：¥${p.money.toLocaleString()}</p><div class="modal-btns"><button class="mc" onclick="skipBuy()">不买</button><button class="mo" onclick="doBuy(${sp.id},${ci})">购买</button></div>`);
+  return true;
+}
+function doBuy(spaceId,pi){ socket.emit('buy-property',{spaceId:spaceId,playerIndex:pi}); hideModal(); autoEndTurn(); }
+function skipBuy(){ hideModal(); autoEndTurn(); }
+function showCustom(){
+  const pl=room.players.filter(p=>!p.bankrupt&&!p.disconnected).map((_,i)=>`<option value="${i}">${room.players[i].name}</option>`).join('');
+  showModal(`<h3>自定义金额</h3><label>玩家</label><select id="mCP">${pl}</select><label>金额（正=收入，负=支出）</label><input type="number" id="mCA" placeholder="如 500 或 -300" inputmode="numeric"><label>备注（可选）</label><input id="mCN" placeholder="原因"><div class="modal-btns"><button class="mc" onclick="hideModal()">取消</button><button class="mo" onclick="doCustom()">确认</button></div>`);
+  document.getElementById('mCP').value=room.currentTurn;
+}
+function doCustom(){
+  const pi=+document.getElementById('mCP').value,a=+document.getElementById('mCA').value,n=document.getElementById('mCN').value.trim();
+  if(isNaN(a))return; socket.emit('adjust-money',{playerIndex:pi,amount:a,note:n||undefined}); hideModal();
+}
+
+// ===== CHAT =====
+function toggleChat(){
+  chatOpen=!chatOpen;
+  document.getElementById('chatPanel').style.display=chatOpen?'flex':'none';
+  if(chatOpen){unread=0;document.getElementById('chatBadge').style.display='none';document.getElementById('chatInput').focus();}
+}
+function sendChat(){const inp=document.getElementById('chatInput'),t=inp.value.trim();if(!t)return;socket.emit('send-chat',{text:t});inp.value='';}
+function addBubble(from,text,color){
+  const m=document.getElementById('chatMsgs'),d=document.createElement('div');d.className='chat-msg';
+  d.innerHTML=`<div class="cm-name" style="color:${color||'#666'}">${from}</div><div class="cm-text">${text.replace(/</g,'&lt;')}</div>`;
+  m.appendChild(d);m.scrollTop=m.scrollHeight;
+}
+
+// ===== OVERLAYS =====
+function openOverlay(name){document.getElementById('ov-'+name).classList.add('show');closeMenu();}
+function closeOverlay(name){document.getElementById('ov-'+name).classList.remove('show');}
+
+// ===== PRINT =====
+function printBoard(){closeMenu();window.print();}
+
+// ===== BOARD =====
+function getPos(id){
+  if(id===0)return{c:11,r:11};if(id<=9)return{c:11-id,r:11};if(id===10)return{c:1,r:11};
+  if(id<=19)return{c:1,r:11-(id-10)};if(id===20)return{c:1,r:1};
+  if(id<=29)return{c:id-19,r:1};if(id===30)return{c:11,r:1};return{c:11,r:id-29};
+}
+function side(id){if([0,10,20,30].includes(id))return'corner';if(id<10)return'bottom';if(id<20)return'left';if(id<30)return'top';return'right';}
+
+(function renderBoard(){
+  const board=document.getElementById('board');
+  S.forEach(sp=>{
+    const pos=getPos(sp.id),sd=side(sp.id);
+    const d=document.createElement('div');
+    d.className=`cell ${sd==='corner'?'corner':'side-'+sd} type-${sp.t}`;
+    d.style.gridColumn=pos.c;d.style.gridRow=pos.r;
+    d.setAttribute('data-space',sp.id);
+    if(sd==='corner'){d.innerHTML=`<div class="cell-icon">${sp.i}</div><div class="cell-name">${sp.n}</div><div class="tokens"></div>`;}
+    else{
+      const clr=sp.g?GC[sp.g]:'';const bar=clr?`background:${clr}`:'background:transparent';
+      const price=sp.p?`¥${sp.p}`:(sp.a?`-¥${sp.a}`:'');
+      d.innerHTML=`<div class="color-bar" style="${bar}"></div><div class="cell-body"><div class="cell-icon">${sp.i}</div><div class="cell-name">${sp.n}</div>${price?`<div class="cell-price">${price}</div>`:''}</div><div class="tokens"></div>`;
+    }
+    board.appendChild(d);
+  });
+})();
+
+// ===== CARDS =====
+(function renderCards(){
+  const dg=document.getElementById('deedGrid');
+  S.filter(s=>s.t==='property').forEach(sp=>{
+    dg.innerHTML+=`<div class="deed-card"><div class="dc-color" style="background:${GC[sp.g]}"></div><div class="dc-name">${sp.i} ${sp.n}</div><div class="dc-sub">${GN[sp.g]}</div><hr>
+    <div class="dc-row"><span>购买</span><b>¥${sp.p}</b></div><hr>
+    <div class="dc-row"><span>基础租金</span><span>¥${sp.r[0]}</span></div><div class="dc-row"><span>同色×2</span><span>¥${sp.r[0]*2}</span></div>
+    ${sp.r.slice(1).map((v,j)=>`<div class="dc-row"><span>升级${j+1}</span><span>¥${v.toLocaleString()}</span></div>`).join('')}<hr>
+    <div class="dc-row"><span>升级费</span><b>¥${sp.bc}</b></div><div class="dc-row"><span>抵押</span><span>¥${Math.floor(sp.p/2)}</span></div></div>`;
+  });
+  S.filter(s=>s.t==='railroad').forEach(sp=>{
+    dg.innerHTML+=`<div class="deed-card"><div class="dc-color" style="background:#555"></div><div class="dc-name">${sp.i} ${sp.n}</div><div class="dc-sub">校门</div><hr>
+    <div class="dc-row"><span>购买</span><b>¥2,000</b></div><hr>
+    <div class="dc-row"><span>1个</span><span>¥250</span></div><div class="dc-row"><span>2个</span><span>¥500</span></div>
+    <div class="dc-row"><span>3个</span><span>¥1,000</span></div><div class="dc-row"><span>4个</span><span>¥2,000</span></div></div>`;
+  });
+  S.filter(s=>s.t==='utility').forEach(sp=>{
+    dg.innerHTML+=`<div class="deed-card"><div class="dc-color" style="background:#888"></div><div class="dc-name">${sp.i} ${sp.n}</div><div class="dc-sub">公用设施</div><hr>
+    <div class="dc-row"><span>购买</span><b>¥1,500</b></div><hr>
+    <div class="dc-row"><span>1个</span><span>骰子×4</span></div><div class="dc-row"><span>2个</span><span>骰子×10</span></div></div>`;
+  });
+  CHANCE.forEach(t=>{document.getElementById('chanceGrid').innerHTML+=`<div class="event-card chance"><div class="ev-title">📋 学生会通知</div>${t}</div>`;});
+  CHEST.forEach(t=>{document.getElementById('chestGrid').innerHTML+=`<div class="event-card chest"><div class="ev-title">💰 奖学金</div>${t}</div>`;});
+})();
+</script>
+</body>
+</html>

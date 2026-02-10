@@ -1,0 +1,13 @@
+{
+  "name": "thu-monopoly",
+  "version": "1.0.0",
+  "description": "清华大富翁 - 在线多人版",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "socket.io": "^4.7.5"
+  }
+}
