@@ -60,7 +60,7 @@
     .dropdown button:last-child{border:none}
 
     /* ===== GAME: BOARD ===== */
-    .board-wrap{padding:8px;display:flex;justify-content:center}
+    .board-wrap{padding:8px;display:flex;justify-content:center;overflow:hidden}
     .board{
       width:100%;max-width:722px;aspect-ratio:1;
       display:grid;
@@ -68,11 +68,24 @@
       grid-template-rows:100fr repeat(9,58fr) 100fr;
       border:2px solid #444;background:#cde6d0;
     }
-    .board-center{grid-column:2/11;grid-row:2/11;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:8px}
-    .board-center .gate{font-size:clamp(28px,8vw,56px)}
-    .board-center h2{font-size:clamp(16px,5vw,32px);color:var(--purple);letter-spacing:4px}
-    .board-center .motto{font-size:clamp(8px,2.5vw,14px);color:#555;letter-spacing:3px;margin-top:4px}
-    .board-center .subtitle{font-size:clamp(6px,1.8vw,10px);color:#888;margin-top:8px;line-height:1.4}
+    .board-center{grid-column:2/11;grid-row:2/11;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:8px;position:relative;overflow:hidden}
+    .board-center .bc-bg{display:flex;flex-direction:column;align-items:center;justify-content:center}
+    .board-center .gate{font-size:clamp(20px,5vw,40px)}
+    .board-center h2{font-size:clamp(12px,3.5vw,24px);color:var(--purple);letter-spacing:4px}
+    .board-center .motto{font-size:clamp(7px,2vw,12px);color:#555;letter-spacing:3px;margin-top:2px}
+    .board-center .bc-turn{font-size:clamp(9px,2.5vw,14px);color:var(--purple);font-weight:700;margin-top:clamp(4px,1.5vw,10px)}
+    .board-center .btn-roll{margin-top:clamp(4px,1.5vw,10px);background:#e74c3c;color:#fff;border:none;padding:clamp(6px,2vw,14px) clamp(16px,5vw,40px);border-radius:10px;font-size:clamp(10px,3vw,18px);font-weight:700;cursor:pointer}
+    .board-center .btn-roll:active{background:#c0392b}
+    .board-center .btn-roll:disabled{background:#ccc;cursor:default}
+    .dice-popup{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(255,255,255,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:5;animation:popIn .3s ease}
+    @keyframes popIn{0%{opacity:0;transform:scale(.6)}100%{opacity:1;transform:scale(1)}}
+    .dice-popup .dp-dice{display:flex;gap:clamp(6px,2vw,16px);margin-bottom:clamp(4px,1.5vw,10px)}
+    .dice-popup .dp-die{width:clamp(32px,10vw,64px);height:clamp(32px,10vw,64px);background:#fff;border:3px solid #333;border-radius:clamp(6px,1.5vw,12px);display:flex;align-items:center;justify-content:center;font-size:clamp(20px,6vw,40px);font-weight:700}
+    .dice-popup .dp-die.rolling{animation:shake .12s infinite alternate}
+    .dice-popup .dp-total{font-size:clamp(12px,3.5vw,22px);font-weight:800;color:var(--purple)}
+    .dice-popup .dp-double{font-size:clamp(10px,2.5vw,16px);color:#e74c3c;font-weight:700}
+    .move-info{position:absolute;bottom:clamp(4px,1.5vw,12px);left:0;right:0;text-align:center;z-index:6;pointer-events:none}
+    .move-info .mi-label{display:inline-block;background:var(--purple);color:#fff;padding:clamp(3px,1vw,8px) clamp(8px,2.5vw,18px);border-radius:20px;font-size:clamp(9px,2.5vw,16px);font-weight:600;animation:popIn .2s ease}
     .cell{border:1px solid #555;position:relative;overflow:hidden;background:#e8f5e9;display:flex;flex-direction:column}
     .cell .color-bar{flex-shrink:0}
     .cell.side-bottom .color-bar{height:clamp(6px,2vw,14px);width:100%}
@@ -86,12 +99,12 @@
     .cell.side-right{flex-direction:row}
     .cell.side-right .color-bar{width:clamp(6px,2vw,14px);height:100%}
     .cell.side-right .cell-body{flex:1;display:flex;flex-direction:column-reverse;align-items:center;justify-content:center;writing-mode:vertical-rl;text-orientation:mixed;gap:1px}
-    .cell .cell-icon{font-size:clamp(6px,1.8vw,13px);line-height:1}
-    .cell .cell-name{font-size:clamp(4px,1.1vw,8px);font-weight:600;line-height:1.1;text-align:center}
-    .cell .cell-price{font-size:clamp(3px,0.9vw,7px);color:#555}
+    .cell .cell-icon{font-size:clamp(8px,2.2vw,16px);line-height:1}
+    .cell .cell-name{font-size:clamp(5px,1.4vw,10px);font-weight:600;line-height:1.1;text-align:center}
+    .cell .cell-price{font-size:clamp(4px,1.1vw,8px);color:#555}
     .cell.corner{display:flex;flex-direction:column;align-items:center;justify-content:center;background:#d4edda;text-align:center}
-    .cell.corner .cell-icon{font-size:clamp(10px,3vw,20px)}
-    .cell.corner .cell-name{font-size:clamp(5px,1.3vw,9px);font-weight:700}
+    .cell.corner .cell-icon{font-size:clamp(12px,3.5vw,24px)}
+    .cell.corner .cell-name{font-size:clamp(6px,1.6vw,11px);font-weight:700}
     .cell.type-go{background:#d4edda}.cell.type-jail{background:#f0e0d0}.cell.type-parking{background:#ffe0e8}
     .cell.type-gotojail{background:#ffd0d0}.cell.type-tax{background:#f5f5dc}.cell.type-chance{background:#fff3cd}
     .cell.type-chest{background:#d1ecf1}.cell.type-railroad{background:#e2e3e5}.cell.type-utility{background:#e2e3e5}
@@ -100,17 +113,7 @@
 
     /* ===== GAME: CONTROLS ===== */
     .controls{max-width:640px;margin:0 auto;padding:8px 12px 20px}
-    .turn-banner{background:var(--purple);color:#fff;text-align:center;padding:10px;border-radius:10px;font-size:14px;font-weight:600;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
-    .turn-banner .round{font-size:11px;opacity:.7}
-    .turn-banner button{background:rgba(255,255,255,.2);color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px}
-    .dice-box{background:#fff;border-radius:12px;padding:16px;text-align:center;margin-bottom:10px;box-shadow:0 1px 6px rgba(0,0,0,.05)}
-    .dice-row{display:flex;justify-content:center;gap:12px;margin:10px 0}
-    .die{width:48px;height:48px;background:#fff;border:3px solid #333;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700}
-    .die.rolling{animation:shake .15s infinite alternate}
     @keyframes shake{0%{transform:rotate(-8deg) scale(1.05)}100%{transform:rotate(8deg) scale(1.05)}}
-    .dice-result{font-size:12px;color:#888;margin-bottom:8px}
-    .btn-roll{background:#e74c3c;color:#fff;border:none;padding:12px 0;border-radius:10px;font-size:16px;font-weight:700;width:100%}
-    .btn-roll:active{background:#c0392b}
 
     .player-card{background:#fff;border-radius:12px;padding:12px;box-shadow:0 1px 6px rgba(0,0,0,.05);margin-bottom:8px;border-left:5px solid #ccc}
     .player-card.is-me{box-shadow:0 0 0 2px var(--purple)}
@@ -267,29 +270,21 @@
   <!-- Board -->
   <div class="board-wrap">
     <div class="board" id="board">
-      <div class="board-center">
-        <div class="gate">🏛️</div>
-        <h2>清华大富翁</h2>
-        <div class="motto">自强不息 厚德载物</div>
-        <div class="subtitle">TSINGHUA MONOPOLY<br>经过起点收取 ¥2000</div>
+      <div class="board-center" id="boardCenter">
+        <div class="bc-bg">
+          <div class="gate">🏛️</div>
+          <h2>清华大富翁</h2>
+          <div class="motto">自强不息 厚德载物</div>
+        </div>
+        <div class="bc-turn" id="bcTurn"></div>
+        <button class="btn-roll" id="bcRollBtn" onclick="emitRoll()">掷骰子 🎲</button>
+        <div class="move-info" id="moveInfo" style="display:none"></div>
       </div>
     </div>
   </div>
 
   <!-- Controls -->
   <div class="controls">
-    <!-- Turn -->
-    <div class="turn-banner">
-      <div><span id="turnName">--</span><span class="round" id="roundText"> · 第 1 回合</span></div>
-    </div>
-
-    <!-- Dice -->
-    <div class="dice-box">
-      <div class="dice-row"><div class="die" id="die1">?</div><div class="die" id="die2">?</div></div>
-      <div class="dice-result" id="diceResult">点击掷骰子</div>
-      <button class="btn-roll" onclick="emitRoll()">掷骰子 🎲</button>
-    </div>
-
     <!-- Players -->
     <div id="playersArea"></div>
 
@@ -461,17 +456,12 @@ function emitLeave() { socket.emit('leave-room'); room=null; closeMenu(); show('
 function renderGame() {
   document.getElementById('gRoomCode').textContent = room.code;
   const cp = room.players[room.currentTurn]; if(!cp) return;
-  document.getElementById('turnName').textContent = cp.name + ' 的回合';
-  document.getElementById('roundText').textContent = ' · 第 ' + room.round + ' 回合';
   const mi = room.players.findIndex(p => p.id === myId);
-
-  if (!animating && room.lastDice[0]>0) {
-    const df=['','⚀','⚁','⚂','⚃','⚄','⚅'];
-    document.getElementById('die1').textContent=df[room.lastDice[0]];
-    document.getElementById('die2').textContent=df[room.lastDice[1]];
-    const t=room.lastDice[0]+room.lastDice[1];
-    document.getElementById('diceResult').textContent=`${room.lastDice[0]} + ${room.lastDice[1]} = ${t}`;
-  }
+  const emoji = EMOJIS[room.currentTurn % EMOJIS.length];
+  document.getElementById('bcTurn').textContent = `${emoji} ${cp.name} 的回合 · 第${room.round}回合`;
+  const rollBtn = document.getElementById('bcRollBtn');
+  rollBtn.disabled = animating || mi !== room.currentTurn;
+  rollBtn.style.display = animating ? 'none' : '';
 
   // Players
   const area = document.getElementById('playersArea');
@@ -517,47 +507,92 @@ function updateTokens(){
 // ===== DICE =====
 function diceAnim(dice, pi, from, to) {
   animating=true;
+  const bc=document.getElementById('boardCenter');
+  const rollBtn=document.getElementById('bcRollBtn');
+  rollBtn.style.display='none';
   const [d1,d2]=dice, df=['','⚀','⚁','⚂','⚃','⚄','⚅'];
-  const e1=document.getElementById('die1'),e2=document.getElementById('die2');
-  e1.classList.add('rolling'); e2.classList.add('rolling');
+  // Show dice popup in board center
+  const popup=document.createElement('div');
+  popup.className='dice-popup';
+  popup.innerHTML=`<div class="dp-dice"><div class="dp-die rolling" id="dpd1">?</div><div class="dp-die rolling" id="dpd2">?</div></div><div class="dp-total" id="dpTotal"></div><div class="dp-double" id="dpDbl"></div>`;
+  bc.appendChild(popup);
+  const pd1=document.getElementById('dpd1'),pd2=document.getElementById('dpd2');
   let c=0;
   const iv=setInterval(()=>{
-    e1.textContent=df[Math.floor(Math.random()*6)+1];
-    e2.textContent=df[Math.floor(Math.random()*6)+1];
-    if(++c>10){
+    pd1.textContent=df[Math.floor(Math.random()*6)+1];
+    pd2.textContent=df[Math.floor(Math.random()*6)+1];
+    if(++c>12){
       clearInterval(iv);
-      e1.textContent=df[d1]; e2.textContent=df[d2];
-      e1.classList.remove('rolling'); e2.classList.remove('rolling');
-      document.getElementById('diceResult').textContent=`${d1} + ${d2} = ${d1+d2}${d1===d2?' 双数!':''}`;
-      // Step-by-step movement
-      if(pi!==undefined && from!==undefined && to!==undefined){
-        stepMove(pi, from, to, ()=>{ animating=false; updateTokens(); if(!checkAutoBuy()) autoEndTurn(); });
-      } else {
-        animating=false; updateTokens(); autoEndTurn();
-      }
+      pd1.textContent=df[d1]; pd2.textContent=df[d2];
+      pd1.classList.remove('rolling'); pd2.classList.remove('rolling');
+      document.getElementById('dpTotal').textContent=`${d1} + ${d2} = ${d1+d2}`;
+      if(d1===d2) document.getElementById('dpDbl').textContent='双数！';
+      // After showing dice, start movement
+      setTimeout(()=>{
+        popup.remove();
+        if(pi!==undefined && from!==undefined && to!==undefined){
+          stepMove(pi, from, to, ()=>{ animating=false; updateTokens(); boardZoomOut(); if(!checkAutoBuy()) autoEndTurn(); });
+        } else {
+          animating=false; updateTokens(); autoEndTurn();
+        }
+      }, 1000);
     }
   },70);
+}
+
+function boardZoomOut(){
+  const board=document.getElementById('board');
+  board.style.transition='transform .5s ease, transform-origin .5s ease';
+  board.style.transform='';
+  board.style.transformOrigin='';
+  setTimeout(()=>board.style.transition='',600);
+}
+
+function boardZoomTo(spaceId){
+  const board=document.getElementById('board');
+  const cell=document.querySelector(`.cell[data-space="${spaceId}"]`);
+  if(!cell||!board) return;
+  const bRect=board.getBoundingClientRect();
+  const cRect=cell.getBoundingClientRect();
+  // Calculate cell center relative to board (in %)
+  const cx=((cRect.left+cRect.width/2)-bRect.left)/bRect.width*100;
+  const cy=((cRect.top+cRect.height/2)-bRect.top)/bRect.height*100;
+  board.style.transition='transform .25s ease, transform-origin .25s ease';
+  board.style.transformOrigin=`${cx}% ${cy}%`;
+  board.style.transform='scale(2)';
 }
 
 function stepMove(pi, from, to, cb){
   const steps=[];
   let pos=from;
   while(pos!==to){ pos=(pos+1)%40; steps.push(pos); }
-  // Temporarily override the moving player's displayed position
   room.players[pi].position = from;
   updateTokens();
+  const moveInfo=document.getElementById('moveInfo');
+  // Zoom to starting position
+  boardZoomTo(from);
   let idx=0;
   function nextStep(){
     document.querySelectorAll('.cell').forEach(c=>c.style.outline='');
-    if(idx>=steps.length){ cb(); return; }
+    if(idx>=steps.length){
+      moveInfo.style.display='none';
+      cb();
+      return;
+    }
     room.players[pi].position = steps[idx];
     updateTokens();
+    const sp=S[steps[idx]];
     const cell=document.querySelector(`.cell[data-space="${steps[idx]}"]`);
     if(cell) cell.style.outline='2px solid #e74c3c';
+    boardZoomTo(steps[idx]);
+    // Show location name in board center
+    moveInfo.style.display='';
+    const isFinal=idx===steps.length-1;
+    moveInfo.innerHTML=`<span class="mi-label">${isFinal?'📍 ':''}${sp?sp.i+' '+sp.n:'?'}</span>`;
     idx++;
-    setTimeout(nextStep, 300);
+    setTimeout(nextStep, isFinal?600:250);
   }
-  setTimeout(nextStep, 300);
+  setTimeout(nextStep, 400);
 }
 
 // ===== EMITS =====
