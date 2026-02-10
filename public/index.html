@@ -536,7 +536,7 @@ function diceAnim(dice, pi, from, to) {
           stepMove(pi, from, to, ()=>{
             animating=false; updateTokens(); boardZoomOut();
             const isMyTurn = room.players[room.currentTurn]?.id === myId;
-            if(isMyTurn){ if(!checkAutoBuy()) autoEndTurn(); }
+            if(isMyTurn){ if(!checkAutoBuy() && !checkEventCard()) autoEndTurn(); }
           });
         } else {
           animating=false; updateTokens();
@@ -634,6 +634,25 @@ function checkAutoBuy(){
 }
 function doBuy(spaceId,pi){ socket.emit('buy-property',{spaceId:spaceId,playerIndex:pi}); hideModal(); autoEndTurn(); }
 function skipBuy(){ hideModal(); autoEndTurn(); }
+function checkEventCard(){
+  if(!room||!room.started) return false;
+  const ci=room.currentTurn;
+  const p=room.players[ci];
+  if(!p) return false;
+  const sp=S[p.position];
+  if(!sp) return false;
+  if(sp.t==='chance'){
+    const card=CHANCE[Math.floor(Math.random()*CHANCE.length)];
+    showModal(`<h3>📋 学生会通知</h3><p style="margin:12px 0;font-size:15px;line-height:1.6">${card}</p><div class="modal-btns"><button class="mo" onclick="hideModal();autoEndTurn()">确定</button></div>`);
+    return true;
+  }
+  if(sp.t==='chest'){
+    const card=CHEST[Math.floor(Math.random()*CHEST.length)];
+    showModal(`<h3>💰 奖学金</h3><p style="margin:12px 0;font-size:15px;line-height:1.6">${card}</p><div class="modal-btns"><button class="mo" onclick="hideModal();autoEndTurn()">确定</button></div>`);
+    return true;
+  }
+  return false;
+}
 function showCustom(){
   const pl=room.players.filter(p=>!p.bankrupt&&!p.disconnected).map((_,i)=>`<option value="${i}">${room.players[i].name}</option>`).join('');
   showModal(`<h3>自定义金额</h3><label>玩家</label><select id="mCP">${pl}</select><label>金额（正=收入，负=支出）</label><input type="number" id="mCA" placeholder="如 500 或 -300" inputmode="numeric"><label>备注（可选）</label><input id="mCN" placeholder="原因"><div class="modal-btns"><button class="mc" onclick="hideModal()">取消</button><button class="mo" onclick="doCustom()">确认</button></div>`);
