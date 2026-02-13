@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理看板 - 清华大富翁</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, 'Segoe UI', sans-serif; background:#f0f2f5; color:#333; min-height:100vh; }
+.login { display:flex; align-items:center; justify-content:center; min-height:100vh; }
+.login-box { background:#fff; padding:40px; border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,.1); text-align:center; }
+.login-box h2 { margin-bottom:20px; }
+.login-box input { padding:10px 16px; border:1px solid #d9d9d9; border-radius:6px; font-size:16px; width:220px; }
+.login-box button { margin-left:8px; padding:10px 20px; background:#1677ff; color:#fff; border:none; border-radius:6px; font-size:16px; cursor:pointer; }
+.login-box button:hover { background:#4096ff; }
+.login-box .err { color:#e74c3c; margin-top:12px; font-size:14px; }
+
+.dashboard { display:none; max-width:1100px; margin:0 auto; padding:24px 16px; }
+header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }
+header h1 { font-size:22px; }
+header .meta { font-size:13px; color:#888; }
+.cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; margin-bottom:24px; }
+.card { background:#fff; border-radius:10px; padding:20px; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+.card .label { font-size:13px; color:#888; margin-bottom:4px; }
+.card .value { font-size:28px; font-weight:700; }
+.card .value.blue { color:#1677ff; }
+.card .value.green { color:#52c41a; }
+.card .value.orange { color:#fa8c16; }
+.card .value.purple { color:#722ed1; }
+
+h3 { font-size:16px; margin-bottom:12px; }
+table { width:100%; background:#fff; border-radius:10px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,.08); border-collapse:collapse; margin-bottom:24px; }
+th, td { text-align:left; padding:10px 14px; border-bottom:1px solid #f0f0f0; font-size:13px; }
+th { background:#fafafa; font-weight:600; color:#666; }
+.badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:12px; }
+.badge.waiting { background:#fff7e6; color:#d46b08; }
+.badge.playing { background:#f6ffed; color:#389e0d; }
+.badge.finished { background:#f0f5ff; color:#1d39c4; }
+.badge.abandoned { background:#fff1f0; color:#cf1322; }
+.empty { text-align:center; color:#bbb; padding:24px; }
+
+.history-section { margin-bottom:24px; }
+.game-detail { background:#fafafa; border-radius:6px; padding:8px 12px; margin-top:6px; }
+.game-detail .player-row { display:flex; align-items:center; gap:8px; padding:3px 0; font-size:12px; border-bottom:1px solid #eee; }
+.game-detail .player-row:last-child { border:none; }
+.player-row .p-name { font-weight:600; min-width:60px; }
+.player-row .p-money { color:#27ae60; font-weight:600; }
+.player-row .p-money.bankrupt { color:#e74c3c; }
+.player-row .p-props { color:#888; }
+.expand-btn { background:none; border:none; color:#1677ff; cursor:pointer; font-size:12px; padding:0; }
+.expand-btn:hover { text-decoration:underline; }
+</style>
+</head>
+<body>
+
+<div class="login" id="loginView">
+  <div class="login-box">
+    <h2>管理看板</h2>
+    <div>
+      <input type="password" id="pwInput" placeholder="输入管理密码" onkeydown="if(event.key==='Enter')doLogin()">
+      <button onclick="doLogin()">进入</button>
+    </div>
+    <div class="err" id="loginErr"></div>
+  </div>
+</div>
+
+<div class="dashboard" id="dashView">
+  <header>
+    <h1>清华大富翁 管理看板</h1>
+    <div class="meta">
+      <span id="uptime"></span> | 每5秒刷新 | <a href="#" onclick="doLogout();return false">退出</a>
+    </div>
+  </header>
+
+  <div class="cards">
+    <div class="card"><div class="label">当前在线</div><div class="value blue" id="cOnline">-</div></div>
+    <div class="card"><div class="label">在房间中</div><div class="value green" id="cInRoom">-</div></div>
+    <div class="card"><div class="label">闲逛中</div><div class="value orange" id="cIdle">-</div></div>
+    <div class="card"><div class="label">活跃房间</div><div class="value green" id="cRooms">-</div></div>
+    <div class="card"><div class="label">最近1小时连接</div><div class="value blue" id="cConnHour">-</div></div>
+  </div>
+
+  <h3>数据统计</h3>
+  <table>
+    <thead><tr><th></th><th>今日</th><th>本周</th><th>本月</th><th>累计</th></tr></thead>
+    <tbody>
+      <tr><td><b>页面访问</b> <span style="color:#999;font-size:11px">次</span></td><td id="fVisitD">-</td><td id="fVisitW">-</td><td id="fVisitM">-</td><td id="fVisitT">-</td></tr>
+      <tr><td><b>进入房间</b> <span style="color:#999;font-size:11px">人次</span></td><td id="fRoomD">-</td><td id="fRoomW">-</td><td id="fRoomM">-</td><td id="fRoomT">-</td></tr>
+      <tr><td><b>开始游戏</b> <span style="color:#999;font-size:11px">局</span></td><td id="fGameD">-</td><td id="fGameW">-</td><td id="fGameM">-</td><td id="fGameT">-</td></tr>
+      <tr><td><b>参与游戏</b> <span style="color:#999;font-size:11px">人次</span></td><td id="fPlayerD">-</td><td id="fPlayerW">-</td><td id="fPlayerM">-</td><td id="fPlayerT">-</td></tr>
+      <tr><td><b>参与游戏</b> <span style="color:#999;font-size:11px">去重</span></td><td id="fUPlayerD">-</td><td id="fUPlayerW">-</td><td id="fUPlayerM">-</td><td id="fUPlayerT">-</td></tr>
+    </tbody>
+  </table>
+
+  <h3>当前房间</h3>
+  <table>
+    <thead><tr><th>房间代码</th><th>玩家</th><th>状态</th><th>回合</th></tr></thead>
+    <tbody id="roomBody"><tr><td colspan="4" class="empty">无活跃房间</td></tr></tbody>
+  </table>
+
+  <div class="history-section">
+    <h3>最近记录</h3>
+    <table>
+      <thead><tr><th>时间</th><th>房间</th><th>玩家</th><th>状态</th><th>回合</th><th>时长</th><th>详情</th></tr></thead>
+      <tbody id="histBody"><tr><td colspan="7" class="empty">暂无记录</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+let pw = sessionStorage.getItem('admin_pw') || '';
+let timer = null;
+
+if (pw) { showDashboard(); }
+
+function doLogin() {
+  pw = document.getElementById('pwInput').value;
+  document.getElementById('loginErr').textContent = '';
+  fetch('/api/stats?pw=' + encodeURIComponent(pw))
+    .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+    .then(() => { sessionStorage.setItem('admin_pw', pw); showDashboard(); })
+    .catch(() => { document.getElementById('loginErr').textContent = '密码错误'; });
+}
+
+function doLogout() {
+  pw = '';
+  sessionStorage.removeItem('admin_pw');
+  clearInterval(timer);
+  document.getElementById('dashView').style.display = 'none';
+  document.getElementById('loginView').style.display = 'flex';
+  document.getElementById('pwInput').value = '';
+}
+
+function showDashboard() {
+  document.getElementById('loginView').style.display = 'none';
+  document.getElementById('dashView').style.display = 'block';
+  refresh();
+  timer = setInterval(refresh, 5000);
+}
+
+function fmtDuration(ms) {
+  if (!ms) return '-';
+  const s = Math.floor(ms/1000);
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60);
+  if (h > 0) return h + '时' + m + '分';
+  if (m > 0) return m + '分' + (s%60) + '秒';
+  return s + '秒';
+}
+
+function fmtUptime(ms) {
+  const s = Math.floor(ms/1000);
+  const d = Math.floor(s/86400), h = Math.floor((s%86400)/3600), m = Math.floor((s%3600)/60);
+  let r = '';
+  if (d) r += d + '天';
+  if (h) r += h + '小时';
+  r += m + '分钟';
+  return '运行 ' + r;
+}
+
+function toggleDetail(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function refresh() {
+  fetch('/api/stats?pw=' + encodeURIComponent(pw))
+    .then(r => { if (!r.ok) { doLogout(); throw new Error(); } return r.json(); })
+    .then(d => {
+      document.getElementById('cOnline').textContent = d.online;
+      document.getElementById('cInRoom').textContent = d.inRoom;
+      document.getElementById('cIdle').textContent = d.idle;
+      document.getElementById('cRooms').textContent = d.activeRooms;
+      document.getElementById('cConnHour').textContent = d.connLastHour;
+      document.getElementById('uptime').textContent = fmtUptime(d.uptimeMs);
+      // Funnel
+      document.getElementById('fVisitD').textContent = d.visitDay;
+      document.getElementById('fVisitW').textContent = d.visitWeek;
+      document.getElementById('fVisitM').textContent = d.visitMonth;
+      document.getElementById('fVisitT').textContent = d.totalConnections;
+      document.getElementById('fRoomD').textContent = d.roomDay;
+      document.getElementById('fRoomW').textContent = d.roomWeek;
+      document.getElementById('fRoomM').textContent = d.roomMonth;
+      document.getElementById('fRoomT').textContent = d.totalRooms;
+      document.getElementById('fGameD').textContent = d.gameDay;
+      document.getElementById('fGameW').textContent = d.gameWeek;
+      document.getElementById('fGameM').textContent = d.gameMonth;
+      document.getElementById('fGameT').textContent = d.totalGames;
+      document.getElementById('fPlayerD').textContent = d.playerDay;
+      document.getElementById('fPlayerW').textContent = d.playerWeek;
+      document.getElementById('fPlayerM').textContent = d.playerMonth;
+      document.getElementById('fPlayerT').textContent = d.playerTotal;
+      document.getElementById('fUPlayerD').textContent = d.uniquePlayerDay;
+      document.getElementById('fUPlayerW').textContent = d.uniquePlayerWeek;
+      document.getElementById('fUPlayerM').textContent = d.uniquePlayerMonth;
+      document.getElementById('fUPlayerT').textContent = d.uniquePlayerTotal;
+
+      const rb = document.getElementById('roomBody');
+      if (d.roomList.length === 0) {
+        rb.innerHTML = '<tr><td colspan="4" class="empty">无活跃房间</td></tr>';
+      } else {
+        rb.innerHTML = d.roomList.map(r => {
+          const names = r.players.map(p => p.name + (p.disconnected ? '(离线)' : '')).join(', ');
+          const status = r.started
+            ? '<span class="badge playing">游戏中</span>'
+            : '<span class="badge waiting">等待中</span>';
+          return `<tr><td><b>${r.code}</b></td><td>${names}</td><td>${status}</td><td>${r.round}</td></tr>`;
+        }).join('');
+      }
+
+      // Merged history: combine roomHistory + gameHistory
+      const gameMap = {};
+      (d.gameHistory || []).forEach(g => { gameMap[g.code] = g; });
+
+      // Build combined entries from roomHistory
+      const combined = [];
+      const usedGameCodes = new Set();
+      (d.roomHistory || []).forEach(r => {
+        const g = gameMap[r.code];
+        if (g) usedGameCodes.add(r.code);
+        combined.push({
+          time: r.createTime,
+          code: r.code,
+          names: (r.playerNames || []).join(', '),
+          gameStarted: r.gameStarted,
+          game: g || null,
+        });
+      });
+      // Add old gameHistory entries not in roomHistory
+      (d.gameHistory || []).forEach(g => {
+        if (!usedGameCodes.has(g.code)) {
+          combined.push({
+            time: g.startTime || g.time,
+            code: g.code,
+            names: (g.playerNames || (g.players && g.players.map ? g.players.map(p=>p.name) : g.players) || []).join(', '),
+            gameStarted: true,
+            game: g,
+          });
+        }
+      });
+      // Sort by time descending
+      combined.sort((a, b) => new Date(b.time) - new Date(a.time));
+
+      const hb = document.getElementById('histBody');
+      if (combined.length === 0) {
+        hb.innerHTML = '<tr><td colspan="7" class="empty">暂无记录</td></tr>';
+      } else {
+        hb.innerHTML = combined.map(c => {
+          const t = new Date(c.time).toLocaleString('zh-CN');
+          const g = c.game;
+
+          let status, rounds = '-', dur = '-', detailHtml = '';
+          if (!c.gameStarted) {
+            status = '<span class="badge waiting">未开始</span>';
+          } else if (g && g._active) {
+            status = '<span class="badge playing">进行中</span>';
+            rounds = g.rounds || '-';
+          } else if (g && g.finished) {
+            status = '<span class="badge finished">已结束' + (g.winner ? ' - ' + g.winner + '胜' : '') + '</span>';
+            rounds = g.rounds || '-';
+            dur = fmtDuration(g.durationMs);
+          } else {
+            status = '<span class="badge abandoned">已放弃</span>';
+            if (g) { rounds = g.rounds || '-'; dur = fmtDuration(g.durationMs); }
+          }
+
+          // Player detail (from finalized game data)
+          if (g && g.players && g.players.length && typeof g.players[0] === 'object') {
+            const rows = g.players.map(p => {
+              const moneyClass = p.bankrupt ? 'p-money bankrupt' : 'p-money';
+              const moneyText = p.bankrupt ? '破产' : '¥' + p.money.toLocaleString();
+              const props = p.propertyNames && p.propertyNames.length > 0
+                ? p.propertyNames.join('、')
+                : '无地产';
+              return `<div class="player-row"><span class="p-name">${p.name}</span><span class="${moneyClass}">${moneyText}</span><span class="p-props">${p.properties}块: ${props}</span></div>`;
+            }).join('');
+            detailHtml = `<div class="game-detail">${rows}</div>`;
+          }
+
+          return `<tr><td>${t}</td><td><b>${c.code}</b></td><td>${c.names}</td><td>${status}</td><td>${rounds}</td><td>${dur}</td><td>${detailHtml}</td></tr>`;
+        }).join('');
+      }
+    })
+    .catch(() => {});
+}
+</script>
+</body>
+</html>

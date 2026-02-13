@@ -11,6 +11,10 @@ primary_region = 'sin'
   min_machines_running = 1
   concurrency_limit = 500
 
+[mounts]
+  source = 'data'
+  destination = '/data'
+
 [[vm]]
   memory = '256mb'
   cpu_kind = 'shared'
