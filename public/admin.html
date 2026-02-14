@@ -235,7 +235,7 @@ function refresh() {
           const roleData = g.playerRoles;
           const nameStr = roleData
             ? roleData.map(pr => (pr.roleEmoji||'') + pr.name + '(' + (pr.roleName||'新生') + ')').join(', ')
-            : (g.playerNames || (g.players && g.players.map ? g.players.map(p=>p.name) : g.players) || []).join(', ');
+            : (g.playerNames || (g.players && g.players.length ? (typeof g.players[0] === 'string' ? g.players : g.players.map(p=>p.name)) : []) || []).join(', ');
           combined.push({
             time: g.startTime || g.time,
             code: g.code,
@@ -247,7 +247,6 @@ function refresh() {
       });
       // Sort by time descending
       combined.sort((a, b) => new Date(b.time) - new Date(a.time));
-
       const hb = document.getElementById('histBody');
       if (combined.length === 0) {
         hb.innerHTML = '<tr><td colspan="7" class="empty">暂无记录</td></tr>';
@@ -263,7 +262,8 @@ function refresh() {
             status = '<span class="badge playing">进行中</span>';
             rounds = g.rounds || '-';
           } else if (g && g.finished) {
-            status = '<span class="badge finished">已结束' + (g.winner ? ' - ' + g.winner + '胜' : '') + '</span>';
+            const endType = g.settled ? '已结算' : '已结束';
+            status = '<span class="badge finished">' + endType + (g.winner ? ' - ' + g.winner + '胜' : '') + '</span>';
             rounds = g.rounds || '-';
             dur = fmtDuration(g.durationMs);
           } else {

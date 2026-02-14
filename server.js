@@ -318,6 +318,7 @@ function finalizeGame(room) {
   entry.durationMs = room.startTime ? Date.now() - room.startTime : 0;
   entry.rounds = room.round;
   entry.finished = !!room.finished;
+  entry.settled = !!room.settled;
   entry.winner = room.winner || null;
   entry.players = room.players.map((p, i) => {
     if (p.bankrupt) {
@@ -753,6 +754,7 @@ io.on('connection', (socket) => {
         addLog(room, `🎓 ${winner.name} 以总资产 ¥${winner.total.toLocaleString()} 顺利毕业，荣获学霸称号！`);
       }
       room.finished = true;
+      room.settled = true;
       room.settlement = results;
       room.endVote = null;
       finalizeGame(room);
