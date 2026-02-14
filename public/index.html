@@ -43,6 +43,12 @@
     .pl-name{flex:1;font-weight:600;font-size:14px}
     .pl-badge{font-size:10px;background:var(--light);color:var(--purple);padding:2px 8px;border-radius:8px}
     .pl-wait{color:#ccc;font-size:12px;padding:10px 0;text-align:center}
+    .role-card{text-align:center;padding:8px 4px;border-radius:10px;border:2px solid #e0e0e0;cursor:pointer;transition:all .2s;background:#fff}
+    .role-card:hover{border-color:#b388c9}
+    .role-card.selected{border-color:var(--purple);background:var(--light)}
+    .role-card .re{font-size:24px;display:block}
+    .role-card .rn{font-size:11px;font-weight:600;display:block;margin-top:2px}
+    .role-card .rd{font-size:9px;color:#888;display:block;margin-top:2px;line-height:1.3}
     .room-btns{display:flex;gap:8px}
     .room-btns button{flex:1;padding:14px;border:none;border-radius:10px;font-size:14px;font-weight:600}
     .btn-go{background:var(--purple);color:#fff}
@@ -243,6 +249,10 @@
       <h4>玩家 <span id="plCount">0</span>/6 <span style="font-size:13px;font-weight:normal;color:#888">· 2~6 名即可开始</span></h4>
       <div id="roomPlayers"></div>
     </div>
+    <div style="margin:12px 0">
+      <h4 style="margin-bottom:8px">选择身份</h4>
+      <div id="roleSelect" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px"></div>
+    </div>
     <div class="room-btns">
       <button class="btn-go" id="btnStart" onclick="emitStart()">开始游戏</button>
       <button class="btn-out" onclick="emitLeave()">离开</button>
@@ -328,8 +338,8 @@
   <div class="ov-body rules-body">
     <h3>游戏简介</h3><p>清华大富翁是以清华大学为主题的桌游，2~6名玩家在清华校园中购买地产、收取租金，成为最后的"清华首富"！</p>
     <h3>游戏准备</h3><ul><li>打印棋盘（建议A3彩色）</li><li>准备骰子两颗（或用在线掷骰子）</li><li>准备棋子（硬币、橡皮等均可）</li><li>每人起始资金 ¥15,000</li></ul>
-    <h3>基本规则</h3><ul><li><b>掷骰子前进</b>：每回合掷两颗骰子，按点数前进</li><li><b>经过/到达起点</b>：收取 ¥1,500</li><li><b>购买地产</b>：到达无主地产可按标价购买</li><li><b>收取租金</b>：到达他人地产需支付租金</li><li><b>升级地产</b>：落到自己的地产可花钱升级，租金大幅提升</li><li><b>同色加成</b>：集齐同色所有地产，租金翻倍</li><li><b>校门</b>：1个¥375 / 2个¥750 / 3个¥1,500 / 4个¥3,000</li><li><b>校园网/校园卡</b>：骰子×6（1个）或×15（2个）</li></ul>
-    <h3>特殊格子</h3><ul><li><b>学生会通知/奖学金</b>：抽卡执行</li><li><b>缴学费</b>：-¥3,000 / <b>交书本费</b>：-¥2,000</li><li><b>挂科补考（监狱）</b>：掷双数或付¥500出狱</li><li><b>被辅导员约谈</b>：直接进监狱</li><li><b>情人坡</b>：安全休息</li></ul>
+    <h3>基本规则</h3><ul><li><b>掷骰子前进</b>：每回合掷两颗骰子，按点数前进</li><li><b>经过/到达起点</b>：收取 ¥2,000</li><li><b>购买地产</b>：到达无主地产可按标价购买</li><li><b>收取租金</b>：到达他人地产需支付租金</li><li><b>升级地产</b>：落到自己的地产可花钱升级，租金大幅提升</li><li><b>同色加成</b>：集齐同色所有地产，租金翻倍</li><li><b>校门</b>：1个¥375 / 2个¥750 / 3个¥1,500 / 4个¥3,000</li><li><b>校园网/校园卡</b>：骰子×6（1个）或×15（2个）</li></ul>
+    <h3>特殊格子</h3><ul><li><b>学生会通知/奖学金</b>：抽卡执行</li><li><b>缴学费</b>：-¥2,000 / <b>交书本费</b>：-¥1,000</li><li><b>挂科补考（监狱）</b>：掷双数或付¥500出狱</li><li><b>被辅导员约谈</b>：直接进监狱</li><li><b>情人坡</b>：安全休息</li></ul>
     <h3>胜利条件</h3><p>最后一名未退学的玩家顺利毕业获胜，或约定时间后资产最多者获胜。</p>
   </div>
 </div>
@@ -345,7 +355,7 @@ const S=[
   {id:1,n:'紫荆园',t:'property',g:'brown',p:600,bc:500,r:[30,60,150,450,1350,2400],i:'🍜'},
   {id:2,n:'奖学金',t:'chest',i:'💰'},
   {id:3,n:'清芬园',t:'property',g:'brown',p:600,bc:500,r:[60,120,300,900,2700,4800],i:'🍛'},
-  {id:4,n:'缴学费',t:'tax',a:3000,i:'💸'},
+  {id:4,n:'缴学费',t:'tax',a:2000,i:'💸'},
   {id:5,n:'东门',t:'railroad',p:2000,i:'🚪'},
   {id:6,n:'桃李园',t:'property',g:'lightblue',p:1000,bc:500,r:[90,180,450,1350,4050,6000],i:'🍱'},
   {id:7,n:'学生会通知',t:'chance',i:'📋'},
@@ -362,7 +372,7 @@ const S=[
   {id:18,n:'东操',t:'property',g:'orange',p:1800,bc:1000,r:[210,420,1050,3000,8250,11250],i:'🏀'},
   {id:19,n:'综合体育馆',t:'property',g:'orange',p:2000,bc:1000,r:[240,480,1200,3300,9000,12000],i:'🏟️'},
   {id:20,n:'情人坡',t:'parking',i:'💕'},
-  {id:21,n:'图书馆',t:'property',g:'red',p:2200,bc:1500,r:[270,540,1350,3750,10500,13125],i:'📖'},
+  {id:21,n:'李文正馆',t:'property',g:'red',p:2200,bc:1500,r:[270,540,1350,3750,10500,13125],i:'📖'},
   {id:22,n:'学生会通知',t:'chance',i:'📋'},
   {id:23,n:'美术学院',t:'property',g:'red',p:2200,bc:1500,r:[270,540,1350,3750,10500,13125],i:'🎨'},
   {id:24,n:'FIT楼',t:'property',g:'red',p:2400,bc:1500,r:[300,600,1500,4500,11250,13875],i:'💻'},
@@ -379,23 +389,32 @@ const S=[
   {id:35,n:'北门',t:'railroad',p:2000,i:'🚪'},
   {id:36,n:'学生会通知',t:'chance',i:'📋'},
   {id:37,n:'苏世民书院',t:'property',g:'darkblue',p:3500,bc:2000,r:[525,1050,2625,7500,16500,19500],i:'🌍'},
-  {id:38,n:'交书本费',t:'tax',a:2000,i:'📕'},
+  {id:38,n:'交书本费',t:'tax',a:1000,i:'📕'},
   {id:39,n:'二校门',t:'property',g:'darkblue',p:4000,bc:2000,r:[750,1500,3000,9000,21000,25500],i:'⛩️'},
 ];
 const GC={brown:'#8B4513',lightblue:'#87CEEB',pink:'#DB7093',orange:'#FF8C00',red:'#DC143C',yellow:'#FFD700',green:'#228B22',darkblue:'#191970'};
 const GN={brown:'食堂区(棕)',lightblue:'食堂区(蓝)',pink:'教学楼(粉)',orange:'运动场(橙)',red:'学术楼(红)',yellow:'文化场馆(黄)',green:'历史名胜(绿)',darkblue:'标志建筑(蓝)'};
 const CG={brown:[1,3],lightblue:[6,8,9],pink:[11,13,14],orange:[16,18,19],red:[21,23,24],yellow:[26,27,29],green:[31,32,34],darkblue:[37,39]};
+const ROLES={
+  freshman:      {name:'新生',   emoji:'🎒',buff:'无特殊效果',debuff:''},
+  athlete:       {name:'体育生', emoji:'🏃',buff:'每次掷骰多走2步',debuff:'踩到食堂(棕/蓝)付双倍租金'},
+  competitor:    {name:'竞赛生', emoji:'🏆',buff:'盖房子费用减半',debuff:'起始资金少¥3000(¥12000)'},
+  alumni:        {name:'校友',   emoji:'🎓',buff:'经过起点拿¥4000(别人拿¥2000)',debuff:'买地产贵25%'},
+  international: {name:'国际生', emoji:'🌍',buff:'起始资金多¥5000(¥20000)',debuff:'踩到别人地产多付30%租金'},
+  talent:        {name:'特长生', emoji:'🎨',buff:'拥有的文化场馆(黄)收双倍租金',debuff:'踩到运动场(橙)付双倍租金'},
+  faculty:       {name:'教职工', emoji:'👔',buff:'买地产打7折',debuff:'每次掷骰少走1步'},
+};
 const CHANCE=[
   '获得"国家奖学金"！收取 ¥8,000','在"挑战杯"中获奖，收取 ¥3,000','自行车被偷了，支付 ¥500 买新车',
   '论文发表在 Nature 上！收取 ¥5,000','被选为学生会主席，每位玩家向你支付 ¥500','食堂饭卡充值故障，支付 ¥200',
-  '获得出国交换机会，前进到起点收取 ¥1,500','宿舍违规用电被抓，支付 ¥1,000','获得创业大赛奖金，收取 ¥4,000','期末复习太累进了校医院，支付 ¥800',
-  '被选中参加军训方阵表演，获得补贴 ¥1,000','清华110周年校庆捐款，支付 ¥2,000','在SRT项目中表现优异，收取 ¥2,500',
-  '深夜在紫操跑步被表白，心情大好，收取 ¥500','选课系统崩溃，抢到热门课被退掉了，支付 ¥600 买二手教材','万圣节在C楼通宵赶DDL，咖啡费 ¥300',
+  '获得出国交换机会，前进到起点收取 ¥1,500','宿舍违规用电被抓，支付 ¥500','获得创业大赛奖金，收取 ¥4,000','期末复习太累进了校医院，支付 ¥400',
+  '被选中参加军训方阵表演，获得补贴 ¥1,000','清华110周年校庆捐款，支付 ¥800','在SRT项目中表现优异，收取 ¥2,500',
+  '深夜在紫操跑步被表白，对方请你吃大餐，收取 ¥500','选课系统崩溃，重选的课要买新教材，支付 ¥300','期末在C楼通宵赶DDL，咖啡外卖费 ¥300',
 ];
 const CHEST=[
-  '获得"一二·九"奖学金，收取 ¥2,000','助教工资到账，收取 ¥1,500','实验设备损坏，赔偿 ¥2,000',
-  '银行转账错误，多收到 ¥1,000','生日快乐！每位玩家向你支付 ¥100','校医院看病，支付 ¥500',
-  '科研项目经费到账，收取 ¥3,000','电脑坏了需要维修，支付 ¥800','获得企业赞助，收取 ¥2,500','前往起点，收取 ¥1,500',
+  '获得"一二·九"奖学金，收取 ¥2,000','助教工资到账，收取 ¥1,500','获得"蒋南翔"奖学金，收取 ¥2,000',
+  '银行转账错误，多收到 ¥1,000','生日快乐！每位玩家向你支付 ¥100','获得"好读书"奖学金，收取 ¥500',
+  '科研项目经费到账，收取 ¥3,000','获得社会实践优秀奖，收取 ¥800','获得企业赞助，收取 ¥2,500','前往起点，收取 ¥1,500',
 ];
 
 const EMOJIS=['👧🏻','👦🏽','👩🏿','🧑🏼','👸🏾','🤴🏻'];
@@ -417,8 +436,10 @@ socket.on('disconnect', () => { document.getElementById('connStatus').textConten
 socket.on('error-msg', m => alert(m));
 socket.on('room-update', d => { room = d; if (d && d.code) savedRoomCode = d.code; if (!animating) refresh(); });
 socket.on('dice-rolled', ({ dice, playerIndex, from, to }) => diceAnim(dice, playerIndex, from, to));
+let _droppedPending = false;
 socket.on('player-dropped', ({ name, reason }) => {
-  showModal(`<div style="text-align:center"><div style="font-size:48px;margin-bottom:8px">💀</div><h3>${name} 退学了！</h3><p style="margin:12px 0;font-size:15px;color:#666">原因：「${reason}」</p><div class="modal-btns"><button class="mo" onclick="hideModal()">好的</button></div></div>`);
+  _droppedPending = true;
+  showModal(`<div style="text-align:center"><div style="font-size:48px;margin-bottom:8px">💀</div><h3>${name} 破产退学了！</h3><p style="margin:12px 0;font-size:15px;color:#e74c3c;font-weight:700">资不抵债，宣告破产</p><p style="margin:8px 0;font-size:14px;color:#666">原因：「${reason}」</p><div class="modal-btns"><button class="mo" onclick="_droppedPending=false;hideModal();if(room)refresh()">确定</button></div></div>`, true);
 });
 socket.on('chat-msg', ({ from, text, color }) => {
   addBubble(from, text, color);
@@ -459,10 +480,19 @@ function renderRoom() {
   const active = room.players.filter(p => !p.disconnected);
   document.getElementById('plCount').textContent = active.length;
   const list = document.getElementById('roomPlayers');
-  list.innerHTML = active.map(p=>`<div class="pl-item"><div class="pl-dot" style="background:${p.color}"></div><span class="pl-name">${p.name}</span>${p.id===room.hostId?'<span class="pl-badge">房主</span>':''}</div>`).join('');
+  const me = active.find(p=>p.id===myId);
+  list.innerHTML = active.map(p=>{
+    const r = ROLES[p.role]||ROLES.freshman;
+    return `<div class="pl-item"><div class="pl-dot" style="background:${p.color}"></div><span class="pl-name">${r.emoji} ${p.name}</span>${p.id===room.hostId?'<span class="pl-badge">房主</span>':''}<span style="font-size:10px;color:#888;margin-left:auto">${r.name}</span></div>`;
+  }).join('');
   if (active.length < 6) list.innerHTML += '<div class="pl-wait">等待更多玩家加入...</div>';
+  // Role selection
+  const myRole = me?.role || 'freshman';
+  const rs = document.getElementById('roleSelect');
+  rs.innerHTML = Object.entries(ROLES).map(([k,v])=>`<div class="role-card${k===myRole?' selected':''}" onclick="selectRole('${k}')"><span class="re">${v.emoji}</span><span class="rn">${v.name}</span>${v.buff?`<span class="rd" style="color:#27ae60">✦ ${v.buff}</span>`:''}${v.debuff?`<span class="rd" style="color:#e74c3c">✧ ${v.debuff}</span>`:''}</div>`).join('');
   document.getElementById('btnStart').style.display = myId===room.hostId ? '' : 'none';
 }
+function selectRole(role){ socket.emit('select-role',{role}); }
 function copyCode() {
   navigator.clipboard.writeText(room.code).then(()=>{
     const b=document.querySelector('.code-copy'); b.textContent='已复制!'; setTimeout(()=>b.textContent='点击复制代码',1200);
@@ -490,7 +520,7 @@ function renderGame() {
     bcTurn.textContent = room.winner ? `🎓 ${room.winner} 顺利毕业！` : '游戏结束！';
     rollBtn.style.display = 'none';
     // Show settlement popup once
-    if (room.settlement && !room._shownSettle) {
+    if (room.settlement && !room._shownSettle && !_droppedPending) {
       room._shownSettle = true;
       const rows = room.settlement.filter(r=>!r.bankrupt).sort((a,b)=>b.total-a.total).map((r,i)=>{
         const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}.`;
@@ -539,9 +569,11 @@ function renderGame() {
     const card = document.createElement('div');
     card.className = `player-card${isMe?' is-me':''}${isTurn?' on-turn':''}`;
     card.style.borderLeftColor = p.color;
+    const roleEmoji = ROLES[p.role]?.emoji||'🎒';
+    const roleName = ROLES[p.role]?.name||'新生';
     card.innerHTML = `
-      <div class="pc-top"><span class="pc-name" style="color:${p.color}"><span class="pc-emoji">${emoji}</span>${p.name}${isMe?' (我)':''}</span><span class="pc-money${p.money<0?' negative':''}">${p.money<0?'-':''}¥${Math.abs(p.money).toLocaleString()}</span></div>
-      <div class="pc-pos">📍 ${posN}${p.bankrupt?' · 已退学':''}</div>
+      <div class="pc-top"><span class="pc-name" style="color:${p.color}"><span class="pc-emoji">${emoji}</span>${p.name}${isMe?' (我)':''} <span style="font-size:11px">${roleEmoji}</span></span><span class="pc-money${p.money<0?' negative':''}">${p.money<0?'-':''}¥${Math.abs(p.money).toLocaleString()}</span></div>
+      <div class="pc-pos">📍 ${posN}${p.bankrupt?' · 已退学':''} · ${roleName}</div>
       <div class="pc-props">${dots||'<span style="font-size:10px;color:#ccc">暂无地产</span>'}</div>`;
     area.appendChild(card);
   });
@@ -674,9 +706,10 @@ function closeMenu(){ menuOpen=false; document.getElementById('dropMenu').style.
 document.addEventListener('click',e=>{ if(menuOpen && !e.target.closest('.dropdown') && !e.target.closest('.menu-btn')) closeMenu(); });
 
 // ===== MODALS =====
-function showModal(h){ document.getElementById('modalBox').innerHTML=h; document.getElementById('modalBg').classList.add('show'); closeMenu(); }
-function hideModal(){ document.getElementById('modalBg').classList.remove('show'); }
-document.getElementById('modalBg').onclick=e=>{if(e.target===e.currentTarget)hideModal();};
+let _modalLocked = false;
+function showModal(h, lock){ _modalLocked=!!lock; document.getElementById('modalBox').innerHTML=h; document.getElementById('modalBg').classList.add('show'); closeMenu(); }
+function hideModal(){ _modalLocked=false; document.getElementById('modalBg').classList.remove('show'); }
+document.getElementById('modalBg').onclick=e=>{if(!_modalLocked && e.target===e.currentTarget)hideModal();};
 
 let lastBuyPromptPos = -1;
 function checkAutoBuy(){
@@ -690,11 +723,13 @@ function checkAutoBuy(){
   if(lastBuyPromptPos===p.position) return false;
   lastBuyPromptPos=p.position;
   const emoji=EMOJIS[ci%EMOJIS.length];
-  const canAfford=p.money>=sp.p;
+  const realPrice=p.role==='alumni'?Math.ceil(sp.p*1.25):p.role==='faculty'?Math.floor(sp.p*0.7):sp.p;
+  const priceNote=p.role==='alumni'?' <span style="font-size:11px;color:#e74c3c">(校友+25%)</span>':p.role==='faculty'?' <span style="font-size:11px;color:#27ae60">(教职工7折)</span>':'';
+  const canAfford=p.money>=realPrice;
   const buyBtn=canAfford
     ? `<button class="mo" onclick="doBuy(${sp.id},${ci})">购买</button>`
     : `<button class="mo" disabled style="background:#ccc;cursor:default">余额不足</button>`;
-  showModal(`<h3>🏠 购买地产</h3><p style="margin:8px 0">${emoji} <b>${p.name}</b> 到达了 <b>${sp.i} ${sp.n}</b></p><p style="font-size:18px;font-weight:700;color:var(--purple);margin:8px 0">¥${sp.p.toLocaleString()}</p><p style="font-size:12px;color:#888">当前余额：¥${p.money.toLocaleString()}</p><div class="modal-btns"><button class="mc" onclick="skipBuy()">不买</button>${buyBtn}</div>`);
+  showModal(`<h3>🏠 购买地产</h3><p style="margin:8px 0">${emoji} <b>${p.name}</b> 到达了 <b>${sp.i} ${sp.n}</b></p><p style="font-size:18px;font-weight:700;color:var(--purple);margin:8px 0">¥${realPrice.toLocaleString()}${priceNote}</p><p style="font-size:12px;color:#888">当前余额：¥${p.money.toLocaleString()}</p><div class="modal-btns"><button class="mc" onclick="skipBuy()">不买</button>${buyBtn}</div>`);
   return true;
 }
 function doBuy(spaceId,pi){ socket.emit('buy-property',{spaceId:spaceId,playerIndex:pi}); hideModal(); autoEndTurn(); }
@@ -721,14 +756,16 @@ function checkAutoUpgrade(){
   if(!sp||!sp.g) return false;
   const prop=room.properties[p.position];
   if(!prop||prop.owner!==ci||prop.level>=5) return false;
-  const cost=sp.bc;
+  const baseCost=sp.bc;
+  const cost=p.role==='competitor'?Math.floor(baseCost*0.5):baseCost;
+  const costNote=p.role==='competitor'?' <span style="font-size:11px;color:#27ae60">(竞赛生半价)</span>':'';
   const canAfford=p.money>=cost;
   const emoji=EMOJIS[ci%EMOJIS.length];
   const lvl=prop.level===0?'无建筑':'等级'+prop.level;
   const upgradeBtn=canAfford
     ? `<button class="mo" onclick="doUpgrade(${sp.id})">升级 ¥${cost.toLocaleString()}</button>`
     : `<button class="mo" disabled style="background:#ccc;cursor:default">余额不足</button>`;
-  showModal(`<h3>🏠 盖房子</h3><p style="margin:8px 0">${emoji} <b>${p.name}</b> 到达了自己的地产 <b>${sp.i} ${sp.n}</b></p><p style="font-size:12px;color:#888;margin:4px 0">当前：${lvl} → 等级${prop.level+1}</p><p style="font-size:18px;font-weight:700;color:#27ae60;margin:8px 0">升级费 ¥${cost.toLocaleString()}</p><p style="font-size:12px;color:#888">当前余额：¥${p.money.toLocaleString()}</p><div class="modal-btns"><button class="mc" onclick="skipUpgrade()">不升级</button>${upgradeBtn}</div>`);
+  showModal(`<h3>🏠 盖房子</h3><p style="margin:8px 0">${emoji} <b>${p.name}</b> 到达了自己的地产 <b>${sp.i} ${sp.n}</b></p><p style="font-size:12px;color:#888;margin:4px 0">当前：${lvl} → 等级${prop.level+1}</p><p style="font-size:18px;font-weight:700;color:#27ae60;margin:8px 0">升级费 ¥${cost.toLocaleString()}${costNote}</p><p style="font-size:12px;color:#888">当前余额：¥${p.money.toLocaleString()}</p><div class="modal-btns"><button class="mc" onclick="skipUpgrade()">不升级</button>${upgradeBtn}</div>`);
   return true;
 }
 function doUpgrade(spaceId){ socket.emit('upgrade-property',{spaceId}); hideModal(); autoEndTurn(); }

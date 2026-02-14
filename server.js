@@ -66,7 +66,7 @@ app.get('/api/stats', adminAuth, (req, res) => {
   for (const [code, room] of rooms) {
     roomList.push({
       code,
-      players: room.players.map(p => ({ name: p.name, disconnected: p.disconnected })),
+      players: room.players.map(p => ({ name: p.name, disconnected: p.disconnected, role: p.role, roleName: ROLES[p.role]?.name || '新生', roleEmoji: ROLES[p.role]?.emoji || '🎒' })),
       started: room.started,
       round: room.round,
     });
@@ -139,11 +139,20 @@ const rooms = new Map();
 const socketRoom = new Map();
 
 const COLORS = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c'];
-const NAMES = ['入学报到','紫荆园','奖学金','清芬园','缴学费','东门','桃李园','学生会通知','听涛园','芝兰园','挂科补考','六教','校园网','四教','三教','南门','西操','奖学金','东操','综合体育馆','情人坡','图书馆','学生会通知','美术学院','FIT楼','西门','大礼堂','新清华学堂','校园卡','蒙民伟音乐厅','被辅导员约谈','主楼','工字厅','奖学金','近春园','北门','学生会通知','苏世民书院','交书本费','二校门'];
+const NAMES = ['入学报到','紫荆园','奖学金','清芬园','缴学费','东门','桃李园','学生会通知','听涛园','芝兰园','挂科补考','六教','校园网','四教','三教','南门','西操','奖学金','东操','综合体育馆','情人坡','李文正馆','学生会通知','美术学院','FIT楼','西门','大礼堂','新清华学堂','校园卡','蒙民伟音乐厅','被辅导员约谈','主楼','工字厅','奖学金','近春园','北门','学生会通知','苏世民书院','交书本费','二校门'];
 const PRICES = {1:600,3:600,5:2000,6:1000,8:1000,9:1200,11:1400,12:1500,13:1400,14:1600,15:2000,16:1800,18:1800,19:2000,21:2200,23:2200,24:2400,25:2000,26:2600,27:2600,28:1500,29:2800,31:3000,32:3000,34:3200,35:2000,37:3500,39:4000};
 const BUILDING_COSTS = {1:500,3:500,6:500,8:500,9:500,11:1000,13:1000,14:1000,16:1000,18:1000,19:1000,21:1500,23:1500,24:1500,26:1500,27:1500,29:1500,31:2000,32:2000,34:2000,37:2000,39:2000};
 const COLOR_GROUPS = {brown:[1,3],lightblue:[6,8,9],pink:[11,13,14],orange:[16,18,19],red:[21,23,24],yellow:[26,27,29],green:[31,32,34],darkblue:[37,39]};
 const SPACE_GROUP = {}; for(const[g,ids] of Object.entries(COLOR_GROUPS)) ids.forEach(id=>SPACE_GROUP[id]=g);
+const ROLES = {
+  freshman:      { name:'新生',   emoji:'🎒', startMoney:0, diceBonus:0 },
+  athlete:       { name:'体育生', emoji:'🏃', startMoney:0, diceBonus:2 },
+  competitor:    { name:'竞赛生', emoji:'🏆', startMoney:-3000, diceBonus:0 },
+  alumni:        { name:'校友',   emoji:'🎓', startMoney:0, diceBonus:0 },
+  international: { name:'国际生', emoji:'🌍', startMoney:5000, diceBonus:0 },
+  talent:        { name:'特长生', emoji:'🎨', startMoney:0, diceBonus:0 },
+  faculty:       { name:'教职工', emoji:'👔', startMoney:0, diceBonus:-1 },
+};
 const DROP_REASONS = [
   '沉迷打剧本杀无法自拔',
   '连续三学期GPA不到2.0',
@@ -154,7 +163,7 @@ const DROP_REASONS = [
   '在荷塘里游泳被保安抓了',
   '把校长的车位占了一学期',
   '体育课挂科四次',
-  '在图书馆吃螺蛳粉被举报',
+  '在李文正馆吃螺蛳粉被举报',
   '用校园网挖矿导致全校断网',
   '毕设答辩PPT打不开',
   '替室友签到被监控拍到',
@@ -170,25 +179,25 @@ const CHANCE_CARDS = [
   { text: '被选为学生会主席，每位玩家向你支付 ¥500', collect: 500 },
   { text: '食堂饭卡充值故障，支付 ¥200', amount: -200 },
   { text: '获得出国交换机会，前进到起点收取 ¥1,500', amount: 1500, moveTo: 0 },
-  { text: '宿舍违规用电被抓，支付 ¥1,000', amount: -1000 },
+  { text: '宿舍违规用电被抓，支付 ¥500', amount: -500 },
   { text: '获得创业大赛奖金，收取 ¥4,000', amount: 4000 },
-  { text: '期末复习太累进了校医院，支付 ¥800', amount: -800 },
+  { text: '期末复习太累进了校医院，支付 ¥400', amount: -400 },
   { text: '被选中参加军训方阵表演，获得补贴 ¥1,000', amount: 1000 },
-  { text: '清华110周年校庆捐款，支付 ¥2,000', amount: -2000 },
+  { text: '清华110周年校庆捐款，支付 ¥800', amount: -800 },
   { text: '在SRT项目中表现优异，收取 ¥2,500', amount: 2500 },
-  { text: '深夜在紫操跑步被表白，心情大好，收取 ¥500', amount: 500 },
-  { text: '选课系统崩溃，抢到热门课被退掉了，支付 ¥600 买二手教材', amount: -600 },
-  { text: '万圣节在C楼通宵赶DDL，咖啡费 ¥300', amount: -300 },
+  { text: '深夜在紫操跑步被表白，对方请你吃大餐，收取 ¥500', amount: 500 },
+  { text: '选课系统崩溃，重选的课要买新教材，支付 ¥300', amount: -300 },
+  { text: '期末在C楼通宵赶DDL，咖啡外卖费 ¥300', amount: -300 },
 ];
 const CHEST_CARDS = [
   { text: '获得"一二·九"奖学金，收取 ¥2,000', amount: 2000 },
   { text: '助教工资到账，收取 ¥1,500', amount: 1500 },
-  { text: '实验设备损坏，赔偿 ¥2,000', amount: -2000 },
+  { text: '获得"蒋南翔"奖学金，收取 ¥2,000', amount: 2000 },
   { text: '银行转账错误，多收到 ¥1,000', amount: 1000 },
   { text: '生日快乐！每位玩家向你支付 ¥100', collect: 100 },
-  { text: '校医院看病，支付 ¥500', amount: -500 },
+  { text: '获得"好读书"奖学金，收取 ¥500', amount: 500 },
   { text: '科研项目经费到账，收取 ¥3,000', amount: 3000 },
-  { text: '电脑坏了需要维修，支付 ¥800', amount: -800 },
+  { text: '获得社会实践优秀奖，收取 ¥800', amount: 800 },
   { text: '获得企业赞助，收取 ¥2,500', amount: 2500 },
   { text: '前往起点，收取 ¥1,500', amount: 1500, moveTo: 0 },
 ];
@@ -312,13 +321,13 @@ function finalizeGame(room) {
   entry.winner = room.winner || null;
   entry.players = room.players.map((p, i) => {
     if (p.bankrupt) {
-      return { name: p.name, money: p.money, properties: (p.lastPropertyNames || []).length, propertyNames: p.lastPropertyNames || [], bankrupt: true };
+      return { name: p.name, money: p.money, properties: (p.lastPropertyNames || []).length, propertyNames: p.lastPropertyNames || [], bankrupt: true, role: p.role, roleName: ROLES[p.role]?.name || '新生', roleEmoji: ROLES[p.role]?.emoji || '🎒' };
     }
     const propCount = Object.values(room.properties).filter(pr => pr.owner === i).length;
     const propNames = Object.entries(room.properties)
       .filter(([_, pr]) => pr.owner === i)
       .map(([sid]) => NAMES[+sid]);
-    return { name: p.name, money: p.money, properties: propCount, propertyNames: propNames, bankrupt: p.bankrupt };
+    return { name: p.name, money: p.money, properties: propCount, propertyNames: propNames, bankrupt: p.bankrupt, role: p.role, roleName: ROLES[p.role]?.name || '新生', roleEmoji: ROLES[p.role]?.emoji || '🎒' };
   });
   saveStats();
 }
@@ -369,7 +378,7 @@ io.on('connection', (socket) => {
     const code = genCode();
     const room = {
       code, hostId: socket.id,
-      players: [{ id: socket.id, name: name||'房主', color: COLORS[0], money: 15000, position: 0, inJail: false, bankrupt: false, disconnected: false }],
+      players: [{ id: socket.id, name: name||'房主', color: COLORS[0], money: 15000, position: 0, inJail: false, bankrupt: false, disconnected: false, role: 'freshman' }],
       started: false, currentTurn: 0, round: 1, properties: {}, log: [], lastDice: [0,0],
     };
     rooms.set(code, room);
@@ -413,7 +422,7 @@ io.on('connection', (socket) => {
 
     room.players.push({
       id: socket.id, name: name||`玩家${room.players.length+1}`, color: COLORS[room.players.length % COLORS.length],
-      money: 15000, position: 0, inJail: false, bankrupt: false, disconnected: false,
+      money: 15000, position: 0, inJail: false, bankrupt: false, disconnected: false, role: 'freshman',
     });
     socketRoom.set(socket.id, code);
     socket.join(code);
@@ -428,6 +437,15 @@ io.on('connection', (socket) => {
   });
 
   guarded(socket, 'leave-room', 5, 10000, () => leaveRoom(socket));
+
+  socket.on('select-role', ({ role }) => {
+    if (!role || !ROLES[role]) return;
+    const code = getCode(socket);
+    const room = rooms.get(code);
+    if (!room || room.started) return;
+    const p = room.players.find(pl => pl.id === socket.id);
+    if (p) { p.role = role; broadcast(code); }
+  });
 
   // start-game: max 10 per 30s
   guarded(socket, 'start-game', 10, 30000, () => {
@@ -449,12 +467,19 @@ io.on('connection', (socket) => {
     const histEntry = {
       code, startTime: new Date().toISOString(),
       playerNames: room.players.map(p => p.name),
+      playerRoles: room.players.map(p => ({ name: p.name, role: p.role, roleName: ROLES[p.role]?.name || '新生', roleEmoji: ROLES[p.role]?.emoji || '🎒' })),
     };
     stats.gameHistory.push(histEntry);
     if (stats.gameHistory.length > 500) stats.gameHistory = stats.gameHistory.slice(-500);
     room.histIndex = stats.gameHistory.length - 1;
     saveStats();
-    addLog(room, '游戏开始！每人 ¥15,000');
+    // Apply role starting money adjustments
+    room.players.forEach(p => {
+      const r = ROLES[p.role];
+      if (r && r.startMoney) p.money += r.startMoney;
+    });
+    const roleInfo = room.players.map(p => `${ROLES[p.role]?.emoji||'🎒'} ${p.name}(${ROLES[p.role]?.name||'新生'})`).join('、');
+    addLog(room, `游戏开始！${roleInfo}`);
     broadcast(code);
   });
 
@@ -471,23 +496,26 @@ io.on('connection', (socket) => {
     const d2 = Math.floor(Math.random()*6)+1;
     room.lastDice = [d1, d2];
     const p = room.players[ci];
-    const total = d1 + d2;
+    const roleBonus = ROLES[p.role]?.diceBonus || 0;
+    const total = Math.max(d1 + d2 + roleBonus, 2);
     const oldPos = p.position;
     p.position = (p.position + total) % 40;
     const sn = NAMES[p.position]||'?';
     const dbl = d1===d2 ? ' (双数！)' : '';
-    addLog(room, `${p.name} 掷出 ${d1}+${d2}=${total}${dbl}，到达「${sn}」`);
+    const bonusStr = roleBonus > 0 ? `+${roleBonus}` : roleBonus < 0 ? `${roleBonus}` : '';
+    addLog(room, `${p.name} 掷出 ${d1}+${d2}${bonusStr}=${total}${dbl}，到达「${sn}」`);
 
     // Pass go (crossed or landed on position 0)
     if (p.position < oldPos) {
-      p.money += 1500;
-      addLog(room, `${p.name} 经过起点 +¥1,500`);
+      const goMoney = p.role === 'alumni' ? 4000 : 2000;
+      p.money += goMoney;
+      addLog(room, `${p.name} 经过起点 +¥${goMoney.toLocaleString()}`);
     }
 
     // Landing effects
     room.lastCard = null;
-    if (p.position === 4) { p.money -= 3000; addLog(room, `${p.name} 缴学费 -¥3,000`); }
-    else if (p.position === 38) { p.money -= 2000; addLog(room, `${p.name} 交书本费 -¥2,000`); }
+    if (p.position === 4) { p.money -= 2000; addLog(room, `${p.name} 缴学费 -¥2,000`); }
+    else if (p.position === 38) { p.money -= 1000; addLog(room, `${p.name} 交书本费 -¥1,000`); }
     else if (p.position === 30) { p.position = 10; p.inJail = true; addLog(room, `${p.name} 被辅导员约谈，进入补考！`); }
     else if (p.position === 20) {
       // 情人坡：如果有其他人也在这里，两人都扣钱
@@ -559,6 +587,15 @@ io.on('connection', (socket) => {
         rent = total * (uCount===2?15:6);
       }
       if (rent > 0) {
+        // Role bonuses for rent
+        const posGroup = SPACE_GROUP[p.position];
+        // Owner bonus: talent doubles yellow rent income
+        if (owner.role === 'talent' && posGroup === 'yellow') rent *= 2;
+        // Payer penalties
+        if (p.role === 'athlete' && (posGroup === 'brown' || posGroup === 'lightblue')) rent *= 2;
+        if (p.role === 'talent' && posGroup === 'orange') rent *= 2;
+        if (p.role === 'international') rent = Math.ceil(rent * 1.3);
+        rent = Math.round(rent);
         p.money -= rent;
         owner.money += rent;
         addLog(room, `${p.name} 向 ${owner.name} 支付租金 ¥${rent.toLocaleString()}`);
@@ -585,14 +622,16 @@ io.on('connection', (socket) => {
     const code = getCode(socket);
     const room = rooms.get(code);
     if (!room || !room.started) return;
-    const price = PRICES[spaceId];
-    if (price === undefined || room.properties[spaceId]) return;
+    const basePrice = PRICES[spaceId];
+    if (basePrice === undefined || room.properties[spaceId]) return;
     const pi = playerIndex ?? room.currentTurn;
     if (pi < 0 || pi >= room.players.length) return;
+    const role = room.players[pi].role;
+    const price = role === 'alumni' ? Math.ceil(basePrice * 1.25) : role === 'faculty' ? Math.floor(basePrice * 0.7) : basePrice;
     if (room.players[pi].money < price) return;
     room.players[pi].money -= price;
     room.properties[spaceId] = { owner: pi, level: 0 };
-    addLog(room, `${room.players[pi].name} 购买了「${NAMES[spaceId]}」（¥${price}）`);
+    addLog(room, `${room.players[pi].name} 购买了「${NAMES[spaceId]}」（¥${price.toLocaleString()}）`);
     checkBankruptcy(room, code);
     broadcast(code);
   });
@@ -605,8 +644,9 @@ io.on('connection', (socket) => {
     if (room.players[ci].id !== socket.id) return;
     const prop = room.properties[spaceId];
     if (!prop || prop.owner !== ci || prop.level >= 5) return;
-    const cost = BUILDING_COSTS[spaceId];
-    if (!cost) return;
+    const baseCost = BUILDING_COSTS[spaceId];
+    if (!baseCost) return;
+    const cost = room.players[ci].role === 'competitor' ? Math.floor(baseCost * 0.5) : baseCost;
     if (room.players[ci].money < cost) return socket.emit('error-msg', '余额不足');
     room.players[ci].money -= cost;
     prop.level++;
@@ -644,9 +684,9 @@ io.on('connection', (socket) => {
     if (!room || !room.started) return;
     const p = room.players[room.currentTurn];
     switch(action) {
-      case 'passgo': p.money+=1500; addLog(room,`${p.name} 经过起点 +¥1,500`); break;
-      case 'tax2000': p.money-=3000; addLog(room,`${p.name} 缴学费 -¥3,000`); break;
-      case 'tax1000': p.money-=2000; addLog(room,`${p.name} 交书本费 -¥2,000`); break;
+      case 'passgo': { const gm=p.role==='alumni'?4000:2000; p.money+=gm; addLog(room,`${p.name} 经过起点 +¥${gm.toLocaleString()}`); break; }
+      case 'tax2000': p.money-=2000; addLog(room,`${p.name} 缴学费 -¥2,000`); break;
+      case 'tax1000': p.money-=1000; addLog(room,`${p.name} 交书本费 -¥1,000`); break;
     }
     checkBankruptcy(room, code);
     broadcast(code);

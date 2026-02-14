@@ -199,7 +199,7 @@ function refresh() {
         rb.innerHTML = '<tr><td colspan="4" class="empty">无活跃房间</td></tr>';
       } else {
         rb.innerHTML = d.roomList.map(r => {
-          const names = r.players.map(p => p.name + (p.disconnected ? '(离线)' : '')).join(', ');
+          const names = r.players.map(p => (p.roleEmoji||'🎒') + p.name + '(' + (p.roleName||'新生') + ')' + (p.disconnected ? '<span style="color:#e74c3c">(离线)</span>' : '')).join(', ');
           const status = r.started
             ? '<span class="badge playing">游戏中</span>'
             : '<span class="badge waiting">等待中</span>';
@@ -217,10 +217,14 @@ function refresh() {
       (d.roomHistory || []).forEach(r => {
         const g = gameMap[r.code];
         if (g) usedGameCodes.add(r.code);
+        const roleData = g && g.playerRoles;
+        const nameStr = roleData
+          ? roleData.map(pr => (pr.roleEmoji||'') + pr.name + '(' + (pr.roleName||'新生') + ')').join(', ')
+          : (r.playerNames || []).join(', ');
         combined.push({
           time: r.createTime,
           code: r.code,
-          names: (r.playerNames || []).join(', '),
+          names: nameStr,
           gameStarted: r.gameStarted,
           game: g || null,
         });
@@ -228,10 +232,14 @@ function refresh() {
       // Add old gameHistory entries not in roomHistory
       (d.gameHistory || []).forEach(g => {
         if (!usedGameCodes.has(g.code)) {
+          const roleData = g.playerRoles;
+          const nameStr = roleData
+            ? roleData.map(pr => (pr.roleEmoji||'') + pr.name + '(' + (pr.roleName||'新生') + ')').join(', ')
+            : (g.playerNames || (g.players && g.players.map ? g.players.map(p=>p.name) : g.players) || []).join(', ');
           combined.push({
             time: g.startTime || g.time,
             code: g.code,
-            names: (g.playerNames || (g.players && g.players.map ? g.players.map(p=>p.name) : g.players) || []).join(', '),
+            names: nameStr,
             gameStarted: true,
             game: g,
           });
@@ -271,7 +279,8 @@ function refresh() {
               const props = p.propertyNames && p.propertyNames.length > 0
                 ? p.propertyNames.join('、')
                 : '无地产';
-              return `<div class="player-row"><span class="p-name">${p.name}</span><span class="${moneyClass}">${moneyText}</span><span class="p-props">${p.properties}块: ${props}</span></div>`;
+              const roleTag = (p.roleEmoji||'') + (p.roleName||'');
+              return `<div class="player-row"><span class="p-name">${roleTag ? roleTag+' ' : ''}${p.name}</span><span class="${moneyClass}">${moneyText}</span><span class="p-props">${p.properties}块: ${props}</span></div>`;
             }).join('');
             detailHtml = `<div class="game-detail">${rows}</div>`;
           }
