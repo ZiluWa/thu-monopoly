@@ -613,6 +613,7 @@ io.on('connection', (socket) => {
     const code = getCode(socket);
     const room = rooms.get(code);
     if (!room || !room.started) return;
+    if (room.players[room.currentTurn]?.id !== socket.id) return;
     room.rolled = false;
     advanceTurn(room);
     broadcast(code);

@@ -655,16 +655,15 @@ function diceAnim(dice, pi, from, to) {
       // After showing dice, start movement
       setTimeout(()=>{
         popup.remove();
+        const iRolled = room.players[pi]?.id === myId;
         if(pi!==undefined && from!==undefined && to!==undefined){
           stepMove(pi, from, to, ()=>{
             animating=false; refresh(); boardZoomOut();
-            const isMyTurn = room.players[room.currentTurn]?.id === myId;
-            if(isMyTurn){ if(!checkAutoBuy() && !checkEventCard() && !checkAutoUpgrade()) autoEndTurn(); }
+            if(iRolled){ if(!checkAutoBuy() && !checkEventCard() && !checkAutoUpgrade()) autoEndTurn(); }
           });
         } else {
           animating=false; refresh();
-          const isMyTurn = room.players[room.currentTurn]?.id === myId;
-          if(isMyTurn) autoEndTurn();
+          if(iRolled) autoEndTurn();
         }
       }, 1000);
     }
