@@ -1,0 +1,1225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>清华大富翁 THU Monopoly</title>
+  <style>
+    /* ===== Reset & Base ===== */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --thu-purple: #660874;
+      --thu-light: #f3e8f9;
+      --board-size: 722px;
+      --corner: 100px;
+      --cell: 58px;
+    }
+    body {
+      font-family: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif;
+      background: #f5f0eb;
+      color: #333;
+    }
+
+    /* ===== Navigation ===== */
+    .top-bar {
+      background: var(--thu-purple);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      height: 56px;
+      gap: 24px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .top-bar h1 { font-size: 20px; white-space: nowrap; }
+    .tabs { display: flex; gap: 4px; }
+    .tabs button {
+      background: rgba(255,255,255,0.15);
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-family: inherit;
+      transition: background .2s;
+    }
+    .tabs button:hover { background: rgba(255,255,255,0.3); }
+    .tabs button.active { background: #fff; color: var(--thu-purple); font-weight: 600; }
+
+    /* ===== Tab Content ===== */
+    .tab-content { display: none; padding: 20px; }
+    .tab-content.active { display: block; }
+
+    /* ===== BOARD ===== */
+    .board-wrap { display: flex; flex-direction: column; align-items: center; }
+    .board-actions { margin-bottom: 12px; }
+    .board-actions button {
+      background: var(--thu-purple); color: #fff; border: none;
+      padding: 8px 20px; border-radius: 6px; cursor: pointer;
+      font-size: 14px; font-family: inherit;
+    }
+    .board {
+      display: grid;
+      grid-template-columns: var(--corner) repeat(9, var(--cell)) var(--corner);
+      grid-template-rows: var(--corner) repeat(9, var(--cell)) var(--corner);
+      width: var(--board-size);
+      height: var(--board-size);
+      border: 3px solid #333;
+      background: #cde6d0;
+      position: relative;
+    }
+
+    /* Board center */
+    .board-center {
+      grid-column: 2 / 11;
+      grid-row: 2 / 11;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #cde6d0;
+      text-align: center;
+      padding: 20px;
+      position: relative;
+    }
+    .board-center h2 {
+      font-size: 36px;
+      color: var(--thu-purple);
+      margin-bottom: 8px;
+      letter-spacing: 6px;
+    }
+    .board-center .motto {
+      font-size: 16px;
+      color: #555;
+      letter-spacing: 4px;
+      margin-bottom: 16px;
+    }
+    .board-center .gate {
+      font-size: 64px;
+      margin-bottom: 12px;
+    }
+    .board-center .subtitle {
+      font-size: 11px;
+      color: #888;
+      line-height: 1.6;
+    }
+
+    /* Cell base */
+    .cell {
+      border: 1px solid #555;
+      position: relative;
+      overflow: hidden;
+      background: #e8f5e9;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Color bar for properties */
+    .cell .color-bar {
+      flex-shrink: 0;
+    }
+    /* Bottom row: color bar on top */
+    .cell.side-bottom .color-bar { height: 14px; width: 100%; }
+    .cell.side-bottom .cell-body { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+
+    /* Top row: color bar on bottom */
+    .cell.side-top { flex-direction: column-reverse; }
+    .cell.side-top .color-bar { height: 14px; width: 100%; }
+    .cell.side-top .cell-body {
+      flex: 1; display: flex; flex-direction: column-reverse;
+      align-items: center; justify-content: center;
+    }
+
+    /* Left column: color bar on right */
+    .cell.side-left { flex-direction: row-reverse; }
+    .cell.side-left .color-bar { width: 14px; height: 100%; }
+    .cell.side-left .cell-body {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+    }
+
+    /* Right column: color bar on left */
+    .cell.side-right { flex-direction: row; }
+    .cell.side-right .color-bar { width: 14px; height: 100%; }
+    .cell.side-right .cell-body {
+      flex: 1; display: flex; flex-direction: column-reverse;
+      align-items: center; justify-content: center;
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+    }
+
+    /* Cell text */
+    .cell .cell-icon { font-size: 14px; line-height: 1; }
+    .cell .cell-name { font-size: 9px; font-weight: 600; line-height: 1.2; text-align: center; }
+    .cell .cell-price { font-size: 8px; color: #555; }
+
+    /* Corner cells */
+    .cell.corner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #d4edda;
+      font-size: 10px;
+      font-weight: 700;
+      text-align: center;
+    }
+    .cell.corner .cell-icon { font-size: 22px; margin-bottom: 2px; }
+    .cell.corner .cell-name { font-size: 9px; }
+
+    /* Special cell backgrounds */
+    .cell.type-go { background: #d4edda; }
+    .cell.type-jail { background: #f0e0d0; }
+    .cell.type-parking { background: #ffe0e8; }
+    .cell.type-gotojail { background: #ffd0d0; }
+    .cell.type-tax { background: #f5f5dc; }
+    .cell.type-chance { background: #fff3cd; }
+    .cell.type-chest { background: #d1ecf1; }
+    .cell.type-railroad { background: #e2e3e5; }
+    .cell.type-utility { background: #e2e3e5; }
+
+    /* ===== COMPANION ===== */
+    .companion { max-width: 600px; margin: 0 auto; }
+
+    /* Setup phase */
+    .setup-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      margin-bottom: 16px;
+    }
+    .setup-card h3 { color: var(--thu-purple); margin-bottom: 16px; }
+    .player-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .player-row input {
+      flex: 1;
+      padding: 8px 12px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    .player-row input:focus { border-color: var(--thu-purple); outline: none; }
+    .color-dot {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+      box-shadow: 0 0 0 2px #ccc;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .color-dot.selected { box-shadow: 0 0 0 3px var(--thu-purple); }
+    .player-count-btns { display: flex; gap: 8px; margin-bottom: 16px; }
+    .player-count-btns button {
+      width: 40px; height: 40px;
+      border-radius: 8px;
+      border: 2px solid #ddd;
+      background: #fff;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      font-family: inherit;
+    }
+    .player-count-btns button.active { border-color: var(--thu-purple); background: var(--thu-light); color: var(--thu-purple); }
+    .btn-primary {
+      background: var(--thu-purple);
+      color: #fff;
+      border: none;
+      padding: 12px 32px;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      width: 100%;
+      font-family: inherit;
+      font-weight: 600;
+    }
+    .btn-primary:hover { opacity: 0.9; }
+
+    /* Game phase */
+    .game-header {
+      background: var(--thu-purple);
+      color: #fff;
+      padding: 12px 16px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .game-header .turn-info { font-size: 18px; font-weight: 600; }
+    .game-header .round-info { font-size: 13px; opacity: 0.8; }
+
+    .dice-section {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }
+    .dice-display { display: flex; justify-content: center; gap: 16px; margin: 16px 0; }
+    .die {
+      width: 56px;
+      height: 56px;
+      background: #fff;
+      border: 3px solid #333;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      font-weight: 700;
+      transition: transform 0.3s;
+    }
+    .die.rolling { animation: diceRoll 0.3s ease-in-out; }
+    @keyframes diceRoll {
+      0%, 100% { transform: rotate(0deg) scale(1); }
+      25% { transform: rotate(15deg) scale(1.1); }
+      75% { transform: rotate(-15deg) scale(1.1); }
+    }
+    .dice-result { font-size: 14px; color: #666; margin-bottom: 12px; }
+    .btn-roll {
+      background: #e74c3c;
+      color: #fff;
+      border: none;
+      padding: 12px 40px;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      font-weight: 600;
+      font-family: inherit;
+    }
+    .btn-roll:hover { background: #c0392b; }
+    .btn-roll:disabled { background: #ccc; cursor: not-allowed; }
+
+    .players-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .player-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      border-left: 5px solid #ccc;
+      transition: all .2s;
+    }
+    .player-card.active-player { box-shadow: 0 4px 20px rgba(102,8,116,0.2); }
+    .player-card .p-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .player-card .p-name { font-weight: 700; font-size: 16px; }
+    .player-card .p-money { font-size: 20px; font-weight: 700; color: #27ae60; }
+    .player-card .p-pos { font-size: 12px; color: #888; margin-bottom: 8px; }
+    .player-card .p-props { display: flex; flex-wrap: wrap; gap: 4px; }
+    .player-card .p-prop-dot {
+      width: 18px; height: 12px;
+      border-radius: 2px;
+      border: 1px solid rgba(0,0,0,0.2);
+      font-size: 7px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff;
+    }
+    .player-card .money-btns { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+    .player-card .money-btns button {
+      padding: 4px 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      background: #f8f8f8;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: inherit;
+    }
+    .player-card .money-btns button:hover { background: #eee; }
+    .player-card .money-btns button.pay { color: #e74c3c; }
+    .player-card .money-btns button.earn { color: #27ae60; }
+
+    .action-bar {
+      background: #fff;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      margin-bottom: 16px;
+    }
+    .action-bar h4 { margin-bottom: 10px; color: var(--thu-purple); }
+    .action-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+    .action-btns button {
+      padding: 8px 16px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      background: #fff;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: inherit;
+    }
+    .action-btns button:hover { border-color: var(--thu-purple); background: var(--thu-light); }
+
+    .game-log {
+      background: #fff;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .game-log h4 { margin-bottom: 8px; color: var(--thu-purple); }
+    .game-log .log-entry { font-size: 12px; padding: 4px 0; border-bottom: 1px solid #f0f0f0; color: #555; }
+    .game-log .log-entry:last-child { border-bottom: none; }
+
+    /* Transfer modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal {
+      background: #fff;
+      border-radius: 16px;
+      padding: 24px;
+      width: 90%;
+      max-width: 400px;
+    }
+    .modal h3 { color: var(--thu-purple); margin-bottom: 16px; }
+    .modal label { display: block; font-size: 13px; color: #666; margin-bottom: 4px; margin-top: 12px; }
+    .modal select, .modal input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    .modal-btns { display: flex; gap: 8px; margin-top: 20px; }
+    .modal-btns button {
+      flex: 1;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      font-family: inherit;
+      border: none;
+    }
+    .modal-btns .btn-cancel { background: #eee; color: #333; }
+    .modal-btns .btn-confirm { background: var(--thu-purple); color: #fff; }
+
+    /* ===== CARDS ===== */
+    .cards-section { max-width: 900px; margin: 0 auto; }
+    .cards-section h3 { color: var(--thu-purple); margin: 20px 0 12px; }
+    .cards-section .print-btn { margin-bottom: 16px; }
+    .cards-section .print-btn button {
+      background: var(--thu-purple); color: #fff; border: none;
+      padding: 8px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; font-family: inherit;
+    }
+    .deed-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+    }
+    .deed-card {
+      border: 2px solid #333;
+      border-radius: 8px;
+      padding: 12px;
+      background: #fff;
+      font-size: 11px;
+    }
+    .deed-card .deed-color {
+      height: 24px;
+      border-radius: 4px;
+      margin-bottom: 8px;
+    }
+    .deed-card .deed-name {
+      text-align: center;
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .deed-card hr { border: none; border-top: 1px solid #ccc; margin: 6px 0; }
+    .deed-card .deed-row { display: flex; justify-content: space-between; padding: 2px 0; }
+
+    .event-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 10px;
+    }
+    .event-card {
+      border: 2px solid #333;
+      border-radius: 8px;
+      padding: 14px;
+      text-align: center;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .event-card.chance { background: #fff9e6; border-color: #f0ad4e; }
+    .event-card.chest { background: #e8f4fd; border-color: #5bc0de; }
+    .event-card .event-title { font-weight: 700; font-size: 13px; margin-bottom: 8px; }
+
+    /* ===== RULES ===== */
+    .rules-section { max-width: 700px; margin: 0 auto; line-height: 1.8; }
+    .rules-section h3 { color: var(--thu-purple); margin: 20px 0 8px; border-bottom: 2px solid var(--thu-purple); padding-bottom: 4px; }
+    .rules-section p, .rules-section li { font-size: 14px; }
+    .rules-section ul { padding-left: 20px; margin-bottom: 12px; }
+
+    /* ===== PRINT ===== */
+    @media print {
+      .top-bar, .board-actions, .no-print { display: none !important; }
+      body { background: #fff; }
+      .tab-content { display: none !important; padding: 0; }
+      .tab-content.print-target { display: block !important; }
+      .board {
+        width: 260mm;
+        height: 260mm;
+        --corner: 30.4mm;
+        --cell: 22.1mm;
+        grid-template-columns: var(--corner) repeat(9, var(--cell)) var(--corner);
+        grid-template-rows: var(--corner) repeat(9, var(--cell)) var(--corner);
+        border-width: 2px;
+      }
+      .cell .cell-name { font-size: 8pt; }
+      .cell .cell-price { font-size: 7pt; }
+      .cell .cell-icon { font-size: 12pt; }
+      .cell.corner .cell-icon { font-size: 18pt; }
+      .board-center h2 { font-size: 32pt; }
+      @page { size: A3 landscape; margin: 10mm; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Top Navigation -->
+<div class="top-bar no-print">
+  <h1>清华大富翁</h1>
+  <div class="tabs">
+    <button class="active" onclick="switchTab('board')">棋盘</button>
+    <button onclick="switchTab('companion')">游戏助手</button>
+    <button onclick="switchTab('cards')">卡牌</button>
+    <button onclick="switchTab('rules')">规则</button>
+  </div>
+</div>
+
+<!-- Board Tab -->
+<div id="tab-board" class="tab-content active">
+  <div class="board-wrap">
+    <div class="board-actions">
+      <button onclick="printBoard()">打印棋盘 (建议A3纸)</button>
+    </div>
+    <div id="board" class="board">
+      <div class="board-center">
+        <div class="gate">🏛️</div>
+        <h2>清华大富翁</h2>
+        <div class="motto">自强不息 厚德载物</div>
+        <div class="subtitle">
+          TSINGHUA MONOPOLY<br>
+          经过起点收取 ¥2000<br>
+          2~6人 | 建议游戏时间60~120分钟
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Companion Tab -->
+<div id="tab-companion" class="tab-content">
+  <div class="companion">
+    <!-- Setup Phase -->
+    <div id="setup-phase">
+      <div class="setup-card">
+        <h3>游戏设置</h3>
+        <p style="font-size:13px;color:#666;margin-bottom:16px;">选择玩家人数，输入姓名，开始游戏！</p>
+        <label style="font-size:13px;color:#666;margin-bottom:8px;display:block;">玩家人数</label>
+        <div class="player-count-btns" id="countBtns"></div>
+        <div id="playerInputs"></div>
+        <button class="btn-primary" onclick="startGame()" style="margin-top:16px;">开始游戏</button>
+      </div>
+    </div>
+    <!-- Game Phase -->
+    <div id="game-phase" style="display:none">
+      <div class="game-header">
+        <div>
+          <div class="turn-info" id="turnInfo">--</div>
+          <div class="round-info" id="roundInfo">第 1 回合</div>
+        </div>
+        <button style="background:rgba(255,255,255,0.2);color:#fff;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:inherit;" onclick="nextTurn()">下一位 ▶</button>
+      </div>
+
+      <div class="dice-section">
+        <div class="dice-display">
+          <div class="die" id="die1">?</div>
+          <div class="die" id="die2">?</div>
+        </div>
+        <div class="dice-result" id="diceResult">点击按钮掷骰子</div>
+        <button class="btn-roll" id="btnRoll" onclick="rollDice()">掷骰子</button>
+      </div>
+
+      <div class="players-grid" id="playersGrid"></div>
+
+      <div class="action-bar">
+        <h4>快捷操作</h4>
+        <div class="action-btns">
+          <button onclick="showTransfer()">转账</button>
+          <button onclick="quickAction('passgo')">过起点 +¥2000</button>
+          <button onclick="quickAction('tax2000')">缴学费 -¥2000</button>
+          <button onclick="quickAction('tax1000')">交书本费 -¥1000</button>
+          <button onclick="showPropertyBuy()">购买地产</button>
+          <button onclick="showCustomAmount()">自定义金额</button>
+        </div>
+      </div>
+
+      <div class="game-log">
+        <h4>游戏记录</h4>
+        <div id="logList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Cards Tab -->
+<div id="tab-cards" class="tab-content">
+  <div class="cards-section">
+    <div class="print-btn"><button onclick="printCards()">打印卡牌</button></div>
+    <h3>地产卡</h3>
+    <div class="deed-grid" id="deedGrid"></div>
+    <h3>学生会通知（机会卡）</h3>
+    <div class="event-grid" id="chanceGrid"></div>
+    <h3>奖学金（公共基金卡）</h3>
+    <div class="event-grid" id="chestGrid"></div>
+  </div>
+</div>
+
+<!-- Rules Tab -->
+<div id="tab-rules" class="tab-content">
+  <div class="rules-section">
+    <h3>游戏简介</h3>
+    <p>清华大富翁是以清华大学为主题的桌游，2~6名玩家在清华校园中购买地产、收取租金，成为最后的"清华首富"！</p>
+
+    <h3>游戏准备</h3>
+    <ul>
+      <li>打印棋盘（建议A3彩色打印）</li>
+      <li>准备骰子两颗（或使用本网站的掷骰子功能）</li>
+      <li>准备棋子（硬币、橡皮等均可）</li>
+      <li>使用本网站"游戏助手"管理金钱和地产，免去纸币烦恼</li>
+      <li>打印"卡牌"页面的地产卡和事件卡，剪下来备用</li>
+      <li>每人起始资金 ¥15,000</li>
+    </ul>
+
+    <h3>基本规则</h3>
+    <ul>
+      <li><b>掷骰子前进：</b>每回合掷两颗骰子，按点数前进</li>
+      <li><b>经过/到达起点：</b>收取 ¥2,000</li>
+      <li><b>购买地产：</b>到达无主地产可按标价购买</li>
+      <li><b>收取租金：</b>到达他人地产需支付租金（见地产卡）</li>
+      <li><b>升级地产：</b>集齐同色地产后可花钱升级（最多3级），租金大幅提升</li>
+      <li><b>校门（铁路）：</b>拥有越多校门，租金越高（1个¥250，2个¥500，3个¥1000，4个¥2000）</li>
+      <li><b>校园网/校园卡：</b>租金为骰子点数 × 4（拥有1个）或 × 10（拥有2个）</li>
+    </ul>
+
+    <h3>特殊格子</h3>
+    <ul>
+      <li><b>学生会通知（机会）：</b>抽取一张机会卡，按指示执行</li>
+      <li><b>奖学金（公共基金）：</b>抽取一张公共基金卡，按指示执行</li>
+      <li><b>缴学费：</b>支付 ¥2,000</li>
+      <li><b>交书本费：</b>支付 ¥1,000</li>
+      <li><b>挂科补考（监狱）：</b>路过不影响；被关进去需掷出双数或支付 ¥500 出狱</li>
+      <li><b>被辅导员约谈：</b>直接进入"挂科补考"</li>
+      <li><b>情人坡（免费停车）：</b>安全休息，无事发生</li>
+    </ul>
+
+    <h3>游戏结束</h3>
+    <p>当只剩一名玩家未破产时，该玩家获胜！或约定时间结束后，资产最多的玩家获胜。</p>
+  </div>
+</div>
+
+<!-- Transfer Modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" id="modalContent"></div>
+</div>
+
+<script>
+// ===== GAME DATA =====
+const SPACES = [
+  { id:0, name:'入学报到', type:'go', icon:'🎓' },
+  { id:1, name:'紫荆园', type:'property', group:'brown', price:600, buildCost:500, rent:[20,100,300,900,1600,2500], icon:'🍜' },
+  { id:2, name:'奖学金', type:'chest', icon:'💰' },
+  { id:3, name:'清芬园', type:'property', group:'brown', price:600, buildCost:500, rent:[40,200,600,1800,3200,4500], icon:'🍛' },
+  { id:4, name:'缴学费', type:'tax', amount:2000, icon:'💸' },
+  { id:5, name:'东门', type:'railroad', price:2000, icon:'🚪' },
+  { id:6, name:'桃李园', type:'property', group:'lightblue', price:1000, buildCost:500, rent:[60,300,900,2700,4000,5500], icon:'🍱' },
+  { id:7, name:'学生会通知', type:'chance', icon:'📋' },
+  { id:8, name:'听涛园', type:'property', group:'lightblue', price:1000, buildCost:500, rent:[60,300,900,2700,4000,5500], icon:'🍲' },
+  { id:9, name:'芝兰园', type:'property', group:'lightblue', price:1200, buildCost:500, rent:[80,400,1000,3000,4500,6000], icon:'🥘' },
+  { id:10, name:'挂科补考', type:'jail', icon:'📝' },
+  { id:11, name:'六教', type:'property', group:'pink', price:1400, buildCost:1000, rent:[100,500,1500,4500,6250,7500], icon:'📚' },
+  { id:12, name:'校园网', type:'utility', price:1500, icon:'📶' },
+  { id:13, name:'四教', type:'property', group:'pink', price:1400, buildCost:1000, rent:[100,500,1500,4500,6250,7500], icon:'🏫' },
+  { id:14, name:'三教', type:'property', group:'pink', price:1600, buildCost:1000, rent:[120,600,1800,5000,7000,9000], icon:'🎒' },
+  { id:15, name:'南门', type:'railroad', price:2000, icon:'🚪' },
+  { id:16, name:'西操', type:'property', group:'orange', price:1800, buildCost:1000, rent:[140,700,2000,5500,7500,9500], icon:'⚽' },
+  { id:17, name:'奖学金', type:'chest', icon:'💰' },
+  { id:18, name:'东操', type:'property', group:'orange', price:1800, buildCost:1000, rent:[140,700,2000,5500,7500,9500], icon:'🏀' },
+  { id:19, name:'综合体育馆', type:'property', group:'orange', price:2000, buildCost:1000, rent:[160,800,2200,6000,8000,10000], icon:'🏟️' },
+  { id:20, name:'情人坡', type:'parking', icon:'💕' },
+  { id:21, name:'图书馆', type:'property', group:'red', price:2200, buildCost:1500, rent:[180,900,2500,7000,8750,10500], icon:'📖' },
+  { id:22, name:'学生会通知', type:'chance', icon:'📋' },
+  { id:23, name:'美术学院', type:'property', group:'red', price:2200, buildCost:1500, rent:[180,900,2500,7000,8750,10500], icon:'🎨' },
+  { id:24, name:'FIT楼', type:'property', group:'red', price:2400, buildCost:1500, rent:[200,1000,3000,7500,9250,11000], icon:'💻' },
+  { id:25, name:'西门', type:'railroad', price:2000, icon:'🚪' },
+  { id:26, name:'大礼堂', type:'property', group:'yellow', price:2600, buildCost:1500, rent:[220,1100,3300,8000,9750,11500], icon:'🏛️' },
+  { id:27, name:'新清华学堂', type:'property', group:'yellow', price:2600, buildCost:1500, rent:[220,1100,3300,8000,9750,11500], icon:'🎭' },
+  { id:28, name:'校园卡', type:'utility', price:1500, icon:'💳' },
+  { id:29, name:'蒙民伟音乐厅', type:'property', group:'yellow', price:2800, buildCost:1500, rent:[240,1200,3600,8500,10250,12000], icon:'🎵' },
+  { id:30, name:'被辅导员约谈', type:'gotojail', icon:'😱' },
+  { id:31, name:'主楼', type:'property', group:'green', price:3000, buildCost:2000, rent:[260,1300,3900,9000,11000,12750], icon:'🏢' },
+  { id:32, name:'工字厅', type:'property', group:'green', price:3000, buildCost:2000, rent:[260,1300,3900,9000,11000,12750], icon:'🏯' },
+  { id:33, name:'奖学金', type:'chest', icon:'💰' },
+  { id:34, name:'近春园', type:'property', group:'green', price:3200, buildCost:2000, rent:[280,1500,4500,10000,12000,14000], icon:'🌸' },
+  { id:35, name:'北门', type:'railroad', price:2000, icon:'🚪' },
+  { id:36, name:'学生会通知', type:'chance', icon:'📋' },
+  { id:37, name:'苏世民书院', type:'property', group:'darkblue', price:3500, buildCost:2000, rent:[350,1750,5000,11000,13000,15000], icon:'🌍' },
+  { id:38, name:'交书本费', type:'tax', amount:1000, icon:'📕' },
+  { id:39, name:'二校门', type:'property', group:'darkblue', price:4000, buildCost:2000, rent:[500,2000,6000,14000,17000,20000], icon:'⛩️' },
+];
+
+const GROUP_COLORS = {
+  brown:'#8B4513', lightblue:'#87CEEB', pink:'#DB7093', orange:'#FF8C00',
+  red:'#DC143C', yellow:'#FFD700', green:'#228B22', darkblue:'#191970'
+};
+
+const GROUP_NAMES = {
+  brown:'食堂区(棕)', lightblue:'食堂区(蓝)', pink:'教学楼(粉)', orange:'运动场(橙)',
+  red:'学术楼(红)', yellow:'文化场馆(黄)', green:'历史名胜(绿)', darkblue:'标志建筑(蓝)'
+};
+
+const PLAYER_COLORS = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c'];
+
+const CHANCE_CARDS = [
+  { text:'获得"国家奖学金"！收取 ¥8,000', action:'gain', amount:8000 },
+  { text:'在"挑战杯"中获奖，收取 ¥3,000', action:'gain', amount:3000 },
+  { text:'自行车被偷了，支付 ¥500 买新车', action:'pay', amount:500 },
+  { text:'论文发表在 Nature 上！收取 ¥5,000', action:'gain', amount:5000 },
+  { text:'被选为学生会主席，每位玩家向你支付 ¥500', action:'collect', amount:500 },
+  { text:'食堂饭卡充值故障，支付 ¥200', action:'pay', amount:200 },
+  { text:'获得出国交换机会，前进到起点收取 ¥2,000', action:'goto', dest:0 },
+  { text:'宿舍违规用电被抓，支付 ¥1,000', action:'pay', amount:1000 },
+  { text:'获得创业大赛奖金，收取 ¥4,000', action:'gain', amount:4000 },
+  { text:'期末复习太累进了校医院，支付 ¥800', action:'pay', amount:800 },
+];
+
+const CHEST_CARDS = [
+  { text:'获得"一二·九"奖学金，收取 ¥2,000', action:'gain', amount:2000 },
+  { text:'助教工资到账，收取 ¥1,500', action:'gain', amount:1500 },
+  { text:'实验设备损坏，赔偿 ¥2,000', action:'pay', amount:2000 },
+  { text:'银行转账错误，多收到 ¥1,000', action:'gain', amount:1000 },
+  { text:'生日快乐！每位玩家向你支付 ¥100', action:'collect', amount:100 },
+  { text:'校医院看病，支付 ¥500', action:'pay', amount:500 },
+  { text:'科研项目经费到账，收取 ¥3,000', action:'gain', amount:3000 },
+  { text:'电脑坏了需要维修，支付 ¥800', action:'pay', amount:800 },
+  { text:'获得企业赞助，收取 ¥2,500', action:'gain', amount:2500 },
+  { text:'前往起点，收取 ¥2,000', action:'goto', dest:0 },
+];
+
+// ===== BOARD RENDERING =====
+function getGridPos(id) {
+  if (id === 0) return { col: 11, row: 11 };
+  if (id <= 9) return { col: 11 - id, row: 11 };
+  if (id === 10) return { col: 1, row: 11 };
+  if (id <= 19) return { col: 1, row: 11 - (id - 10) };
+  if (id === 20) return { col: 1, row: 1 };
+  if (id <= 29) return { col: id - 19, row: 1 };
+  if (id === 30) return { col: 11, row: 1 };
+  return { col: 11, row: id - 29 };
+}
+
+function getSide(id) {
+  if ([0,10,20,30].includes(id)) return 'corner';
+  if (id < 10) return 'bottom';
+  if (id < 20) return 'left';
+  if (id < 30) return 'top';
+  return 'right';
+}
+
+function renderBoard() {
+  const board = document.getElementById('board');
+  SPACES.forEach(sp => {
+    const pos = getGridPos(sp.id);
+    const side = getSide(sp.id);
+    const div = document.createElement('div');
+    div.className = `cell ${side === 'corner' ? 'corner' : 'side-' + side} type-${sp.type}`;
+    div.style.gridColumn = pos.col;
+    div.style.gridRow = pos.row;
+
+    if (side === 'corner') {
+      div.innerHTML = `<div class="cell-icon">${sp.icon}</div><div class="cell-name">${sp.name}</div>`;
+    } else {
+      const color = sp.group ? GROUP_COLORS[sp.group] : '';
+      const barStyle = color ? `background:${color}` : 'background:transparent';
+      const priceText = sp.price ? `¥${sp.price}` : (sp.amount ? `-¥${sp.amount}` : '');
+      div.innerHTML = `
+        <div class="color-bar" style="${barStyle}"></div>
+        <div class="cell-body">
+          <div class="cell-icon">${sp.icon}</div>
+          <div class="cell-name">${sp.name}</div>
+          ${priceText ? `<div class="cell-price">${priceText}</div>` : ''}
+        </div>`;
+    }
+    board.appendChild(div);
+  });
+}
+
+// ===== TAB MANAGEMENT =====
+function switchTab(name) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tabs button').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  document.querySelectorAll('.tabs button').forEach(btn => {
+    if (btn.textContent === {board:'棋盘',companion:'游戏助手',cards:'卡牌',rules:'规则'}[name]) btn.classList.add('active');
+  });
+}
+
+function printBoard() {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('print-target'));
+  document.getElementById('tab-board').classList.add('print-target');
+  window.print();
+}
+function printCards() {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('print-target'));
+  document.getElementById('tab-cards').classList.add('print-target');
+  window.print();
+}
+
+// ===== GAME STATE =====
+let game = {
+  started: false,
+  players: [],
+  currentTurn: 0,
+  round: 1,
+  properties: {},
+  log: [],
+  lastDice: [0, 0],
+};
+
+// ===== SETUP =====
+let setupPlayerCount = 4;
+
+function initSetup() {
+  const countBtns = document.getElementById('countBtns');
+  for (let i = 2; i <= 6; i++) {
+    const btn = document.createElement('button');
+    btn.textContent = i;
+    btn.className = i === setupPlayerCount ? 'active' : '';
+    btn.onclick = () => {
+      setupPlayerCount = i;
+      document.querySelectorAll('.player-count-btns button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderPlayerInputs();
+    };
+    countBtns.appendChild(btn);
+  }
+  renderPlayerInputs();
+}
+
+function renderPlayerInputs() {
+  const container = document.getElementById('playerInputs');
+  container.innerHTML = '';
+  for (let i = 0; i < setupPlayerCount; i++) {
+    const row = document.createElement('div');
+    row.className = 'player-row';
+    row.innerHTML = `
+      <div class="color-dot" style="background:${PLAYER_COLORS[i]}"></div>
+      <input type="text" placeholder="玩家${i + 1}的名字" value="玩家${i + 1}" id="pname-${i}">`;
+    container.appendChild(row);
+  }
+}
+
+function startGame() {
+  game.players = [];
+  for (let i = 0; i < setupPlayerCount; i++) {
+    const name = document.getElementById(`pname-${i}`).value.trim() || `玩家${i + 1}`;
+    game.players.push({
+      name,
+      color: PLAYER_COLORS[i],
+      money: 15000,
+      position: 0,
+      inJail: false,
+      bankrupt: false,
+    });
+  }
+  game.started = true;
+  game.currentTurn = 0;
+  game.round = 1;
+  game.properties = {};
+  game.log = [];
+  game.lastDice = [0, 0];
+
+  document.getElementById('setup-phase').style.display = 'none';
+  document.getElementById('game-phase').style.display = 'block';
+  addLog('游戏开始！每人 ¥15,000');
+  updateGameUI();
+}
+
+// ===== GAME UI =====
+function updateGameUI() {
+  const cp = game.players[game.currentTurn];
+  document.getElementById('turnInfo').textContent = `${cp.name} 的回合`;
+  document.getElementById('turnInfo').style.color = '#fff';
+  document.getElementById('roundInfo').textContent = `第 ${game.round} 回合`;
+
+  // Player cards
+  const grid = document.getElementById('playersGrid');
+  grid.innerHTML = '';
+  game.players.forEach((p, i) => {
+    if (p.bankrupt) return;
+    const card = document.createElement('div');
+    card.className = `player-card ${i === game.currentTurn ? 'active-player' : ''}`;
+    card.style.borderLeftColor = p.color;
+
+    // Properties owned
+    const ownedProps = Object.entries(game.properties)
+      .filter(([_, v]) => v.owner === i)
+      .map(([sid]) => SPACES[parseInt(sid)]);
+
+    const propDots = ownedProps.map(sp => {
+      const c = sp.group ? GROUP_COLORS[sp.group] : '#888';
+      const lvl = game.properties[sp.id]?.level || 0;
+      return `<div class="p-prop-dot" style="background:${c}" title="${sp.name} Lv${lvl}">${lvl > 0 ? lvl : ''}</div>`;
+    }).join('');
+
+    const posName = SPACES[p.position]?.name || '起点';
+
+    card.innerHTML = `
+      <div class="p-header">
+        <span class="p-name" style="color:${p.color}">${p.name}</span>
+        <span class="p-money">¥${p.money.toLocaleString()}</span>
+      </div>
+      <div class="p-pos">位置: ${posName} ${p.inJail ? '(补考中)' : ''}</div>
+      <div class="p-props">${propDots || '<span style="font-size:11px;color:#aaa">暂无地产</span>'}</div>
+      <div class="money-btns">
+        <button class="earn" onclick="adjustMoney(${i}, 500)">+500</button>
+        <button class="earn" onclick="adjustMoney(${i}, 1000)">+1000</button>
+        <button class="earn" onclick="adjustMoney(${i}, 2000)">+2000</button>
+        <button class="pay" onclick="adjustMoney(${i}, -500)">-500</button>
+        <button class="pay" onclick="adjustMoney(${i}, -1000)">-1000</button>
+        <button class="pay" onclick="adjustMoney(${i}, -2000)">-2000</button>
+      </div>`;
+    grid.appendChild(card);
+  });
+
+  // Log
+  const logList = document.getElementById('logList');
+  logList.innerHTML = game.log.slice(-20).reverse().map(l => `<div class="log-entry">${l}</div>`).join('');
+}
+
+function addLog(text) {
+  const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  game.log.push(`[${time}] ${text}`);
+}
+
+// ===== DICE =====
+function rollDice() {
+  const d1 = Math.floor(Math.random() * 6) + 1;
+  const d2 = Math.floor(Math.random() * 6) + 1;
+  game.lastDice = [d1, d2];
+
+  const die1 = document.getElementById('die1');
+  const die2 = document.getElementById('die2');
+  die1.classList.add('rolling');
+  die2.classList.add('rolling');
+
+  const dieFaces = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+
+  // Animation
+  let count = 0;
+  const interval = setInterval(() => {
+    die1.textContent = dieFaces[Math.floor(Math.random() * 6) + 1];
+    die2.textContent = dieFaces[Math.floor(Math.random() * 6) + 1];
+    count++;
+    if (count > 8) {
+      clearInterval(interval);
+      die1.textContent = dieFaces[d1];
+      die2.textContent = dieFaces[d2];
+      die1.classList.remove('rolling');
+      die2.classList.remove('rolling');
+
+      const total = d1 + d2;
+      const doubles = d1 === d2 ? ' (双数！)' : '';
+      document.getElementById('diceResult').textContent = `${d1} + ${d2} = ${total}${doubles}`;
+
+      const cp = game.players[game.currentTurn];
+      cp.position = (cp.position + total) % 40;
+      addLog(`${cp.name} 掷出 ${total}${doubles}，移动到 ${SPACES[cp.position].name}`);
+      updateGameUI();
+    }
+  }, 80);
+}
+
+// ===== ACTIONS =====
+function nextTurn() {
+  do {
+    game.currentTurn = (game.currentTurn + 1) % game.players.length;
+    if (game.currentTurn === 0) game.round++;
+  } while (game.players[game.currentTurn].bankrupt);
+  document.getElementById('diceResult').textContent = '点击按钮掷骰子';
+  document.getElementById('die1').textContent = '?';
+  document.getElementById('die2').textContent = '?';
+  updateGameUI();
+}
+
+function adjustMoney(playerIdx, amount) {
+  const p = game.players[playerIdx];
+  p.money += amount;
+  addLog(`${p.name} ${amount > 0 ? '收入' : '支出'} ¥${Math.abs(amount).toLocaleString()}`);
+  updateGameUI();
+}
+
+function quickAction(action) {
+  const cp = game.players[game.currentTurn];
+  switch (action) {
+    case 'passgo':
+      cp.money += 2000;
+      addLog(`${cp.name} 经过起点，收取 ¥2,000`);
+      break;
+    case 'tax2000':
+      cp.money -= 2000;
+      addLog(`${cp.name} 缴学费 ¥2,000`);
+      break;
+    case 'tax1000':
+      cp.money -= 1000;
+      addLog(`${cp.name} 交书本费 ¥1,000`);
+      break;
+  }
+  updateGameUI();
+}
+
+// ===== MODALS =====
+function showModal(html) {
+  document.getElementById('modalContent').innerHTML = html;
+  document.getElementById('modalOverlay').classList.add('show');
+}
+function hideModal() {
+  document.getElementById('modalOverlay').classList.remove('show');
+}
+document.getElementById('modalOverlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) hideModal();
+});
+
+function showTransfer() {
+  const opts = game.players.filter(p => !p.bankrupt)
+    .map((p, i) => `<option value="${i}">${p.name}</option>`).join('');
+  showModal(`
+    <h3>转账</h3>
+    <label>付款方</label>
+    <select id="tfFrom">${opts}</select>
+    <label>收款方</label>
+    <select id="tfTo">${opts}</select>
+    <label>金额</label>
+    <input type="number" id="tfAmount" placeholder="输入金额" min="1">
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="hideModal()">取消</button>
+      <button class="btn-confirm" onclick="doTransfer()">确认转账</button>
+    </div>
+  `);
+  document.getElementById('tfFrom').value = game.currentTurn;
+}
+
+function doTransfer() {
+  const from = parseInt(document.getElementById('tfFrom').value);
+  const to = parseInt(document.getElementById('tfTo').value);
+  const amount = parseInt(document.getElementById('tfAmount').value);
+  if (isNaN(amount) || amount <= 0 || from === to) return;
+  game.players[from].money -= amount;
+  game.players[to].money += amount;
+  addLog(`${game.players[from].name} 向 ${game.players[to].name} 转账 ¥${amount.toLocaleString()}`);
+  hideModal();
+  updateGameUI();
+}
+
+function showPropertyBuy() {
+  const cp = game.players[game.currentTurn];
+  const space = SPACES[cp.position];
+  if (!space || !['property', 'railroad', 'utility'].includes(space.type)) {
+    // Show full list
+    const available = SPACES.filter(s =>
+      ['property', 'railroad', 'utility'].includes(s.type) && !game.properties[s.id]
+    ).map(s => `<option value="${s.id}">${s.name} - ¥${s.price}</option>`).join('');
+    if (!available) { alert('没有可购买的地产了'); return; }
+    showModal(`
+      <h3>购买地产</h3>
+      <label>选择地产</label>
+      <select id="buyProp">${available}</select>
+      <label>购买者</label>
+      <select id="buyPlayer">${game.players.filter(p=>!p.bankrupt).map((p,i)=>`<option value="${i}">${p.name}</option>`).join('')}</select>
+      <div class="modal-btns">
+        <button class="btn-cancel" onclick="hideModal()">取消</button>
+        <button class="btn-confirm" onclick="doBuyProperty()">购买</button>
+      </div>
+    `);
+    document.getElementById('buyPlayer').value = game.currentTurn;
+  } else if (!game.properties[space.id]) {
+    // Quick buy current space
+    showModal(`
+      <h3>购买 ${space.name}</h3>
+      <p style="margin:12px 0">价格: <b>¥${space.price.toLocaleString()}</b></p>
+      <p>你的余额: ¥${cp.money.toLocaleString()}</p>
+      <div class="modal-btns">
+        <button class="btn-cancel" onclick="hideModal()">取消</button>
+        <button class="btn-confirm" onclick="doBuyProperty(${space.id}, ${game.currentTurn})">购买</button>
+      </div>
+    `);
+  } else {
+    alert('该地产已被购买');
+  }
+}
+
+function doBuyProperty(spaceId, playerIdx) {
+  if (spaceId === undefined) {
+    spaceId = parseInt(document.getElementById('buyProp').value);
+    playerIdx = parseInt(document.getElementById('buyPlayer').value);
+  }
+  const space = SPACES[spaceId];
+  const player = game.players[playerIdx];
+  if (player.money < space.price) { alert('余额不足！'); return; }
+  player.money -= space.price;
+  game.properties[spaceId] = { owner: playerIdx, level: 0 };
+  addLog(`${player.name} 购买了 ${space.name}，花费 ¥${space.price.toLocaleString()}`);
+  hideModal();
+  updateGameUI();
+}
+
+function showCustomAmount() {
+  const opts = game.players.filter(p => !p.bankrupt)
+    .map((p, i) => `<option value="${i}">${p.name}</option>`).join('');
+  showModal(`
+    <h3>自定义金额调整</h3>
+    <label>玩家</label>
+    <select id="customPlayer">${opts}</select>
+    <label>金额（正数为收入，负数为支出）</label>
+    <input type="number" id="customAmount" placeholder="例如: 500 或 -300">
+    <label>备注</label>
+    <input type="text" id="customNote" placeholder="可选">
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="hideModal()">取消</button>
+      <button class="btn-confirm" onclick="doCustomAmount()">确认</button>
+    </div>
+  `);
+  document.getElementById('customPlayer').value = game.currentTurn;
+}
+
+function doCustomAmount() {
+  const idx = parseInt(document.getElementById('customPlayer').value);
+  const amount = parseInt(document.getElementById('customAmount').value);
+  const note = document.getElementById('customNote').value.trim();
+  if (isNaN(amount)) return;
+  game.players[idx].money += amount;
+  const desc = note || (amount > 0 ? '收入' : '支出');
+  addLog(`${game.players[idx].name} ${desc} ¥${Math.abs(amount).toLocaleString()}`);
+  hideModal();
+  updateGameUI();
+}
+
+// ===== CARDS RENDERING =====
+function renderCards() {
+  // Property deeds
+  const deedGrid = document.getElementById('deedGrid');
+  SPACES.filter(s => s.type === 'property').forEach(sp => {
+    const color = GROUP_COLORS[sp.group];
+    const card = document.createElement('div');
+    card.className = 'deed-card';
+    card.innerHTML = `
+      <div class="deed-color" style="background:${color}"></div>
+      <div class="deed-name">${sp.icon} ${sp.name}</div>
+      <div style="text-align:center;font-size:10px;color:#888;margin-bottom:6px">${GROUP_NAMES[sp.group]}</div>
+      <hr>
+      <div class="deed-row"><span>购买价格</span><b>¥${sp.price.toLocaleString()}</b></div>
+      <hr>
+      <div class="deed-row"><span>基础租金</span><span>¥${sp.rent[0]}</span></div>
+      <div class="deed-row"><span>集齐同色(×2)</span><span>¥${sp.rent[0] * 2}</span></div>
+      <div class="deed-row"><span>升级 1 级</span><span>¥${sp.rent[1].toLocaleString()}</span></div>
+      <div class="deed-row"><span>升级 2 级</span><span>¥${sp.rent[2].toLocaleString()}</span></div>
+      <div class="deed-row"><span>升级 3 级</span><span>¥${sp.rent[3].toLocaleString()}</span></div>
+      <div class="deed-row"><span>升级 4 级</span><span>¥${sp.rent[4].toLocaleString()}</span></div>
+      <div class="deed-row"><span>升级 5 级(满)</span><span>¥${sp.rent[5].toLocaleString()}</span></div>
+      <hr>
+      <div class="deed-row"><span>每次升级费用</span><b>¥${sp.buildCost.toLocaleString()}</b></div>
+      <div class="deed-row"><span>抵押价值</span><span>¥${Math.floor(sp.price / 2).toLocaleString()}</span></div>`;
+    deedGrid.appendChild(card);
+  });
+
+  // Railroad deeds
+  SPACES.filter(s => s.type === 'railroad').forEach(sp => {
+    const card = document.createElement('div');
+    card.className = 'deed-card';
+    card.innerHTML = `
+      <div class="deed-color" style="background:#555"></div>
+      <div class="deed-name">${sp.icon} ${sp.name}</div>
+      <div style="text-align:center;font-size:10px;color:#888;margin-bottom:6px">校门</div>
+      <hr>
+      <div class="deed-row"><span>购买价格</span><b>¥${sp.price.toLocaleString()}</b></div>
+      <hr>
+      <div class="deed-row"><span>拥有 1 个校门</span><span>¥250</span></div>
+      <div class="deed-row"><span>拥有 2 个校门</span><span>¥500</span></div>
+      <div class="deed-row"><span>拥有 3 个校门</span><span>¥1,000</span></div>
+      <div class="deed-row"><span>拥有 4 个校门</span><span>¥2,000</span></div>
+      <hr>
+      <div class="deed-row"><span>抵押价值</span><span>¥1,000</span></div>`;
+    deedGrid.appendChild(card);
+  });
+
+  // Utility deeds
+  SPACES.filter(s => s.type === 'utility').forEach(sp => {
+    const card = document.createElement('div');
+    card.className = 'deed-card';
+    card.innerHTML = `
+      <div class="deed-color" style="background:#888"></div>
+      <div class="deed-name">${sp.icon} ${sp.name}</div>
+      <div style="text-align:center;font-size:10px;color:#888;margin-bottom:6px">公用设施</div>
+      <hr>
+      <div class="deed-row"><span>购买价格</span><b>¥${sp.price.toLocaleString()}</b></div>
+      <hr>
+      <div class="deed-row"><span>拥有 1 个设施</span><span>骰子×4</span></div>
+      <div class="deed-row"><span>拥有 2 个设施</span><span>骰子×10</span></div>
+      <hr>
+      <div class="deed-row"><span>抵押价值</span><span>¥750</span></div>`;
+    deedGrid.appendChild(card);
+  });
+
+  // Chance cards
+  const chanceGrid = document.getElementById('chanceGrid');
+  CHANCE_CARDS.forEach(c => {
+    const card = document.createElement('div');
+    card.className = 'event-card chance';
+    card.innerHTML = `<div class="event-title">📋 学生会通知</div><div>${c.text}</div>`;
+    chanceGrid.appendChild(card);
+  });
+
+  // Chest cards
+  const chestGrid = document.getElementById('chestGrid');
+  CHEST_CARDS.forEach(c => {
+    const card = document.createElement('div');
+    card.className = 'event-card chest';
+    card.innerHTML = `<div class="event-title">💰 奖学金</div><div>${c.text}</div>`;
+    chestGrid.appendChild(card);
+  });
+}
+
+// ===== INIT =====
+renderBoard();
+initSetup();
+renderCards();
+</script>
+
+</body>
+</html>
