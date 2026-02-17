@@ -76,8 +76,12 @@ app.get('/api/stats', adminAuth, (req, res) => {
   const rLog = stats.roomLog || [];
   function count(arr, ms) { return arr.filter(t => t > now - ms).length; }
   const _1d = 86400000, _7d = 7*_1d, _30d = 30*_1d;
-  // Count all games that were actually started (gameHistory only contains started games)
-  const playedGames = stats.gameHistory || [];
+  // Only count games that were finalized (endTime set) or currently in progress
+  const playedGames = (stats.gameHistory || []).filter(g => {
+    if (g.endTime) return true;
+    const activeRoom = rooms.get(g.code);
+    return !!(activeRoom && activeRoom.started && !activeRoom.finished);
+  });
   function countGames(arr, ms) { return arr.filter(g => g.startTime && new Date(g.startTime).getTime() > now - ms).length; }
 
   const inRoom = socketRoom.size;
