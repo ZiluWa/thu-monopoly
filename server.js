@@ -74,9 +74,11 @@ app.get('/api/stats', adminAuth, (req, res) => {
   const now = Date.now();
   const cLog = stats.connectionLog || [];
   const rLog = stats.roomLog || [];
-  const gLog = stats.gameStartLog || [];
   function count(arr, ms) { return arr.filter(t => t > now - ms).length; }
   const _1d = 86400000, _7d = 7*_1d, _30d = 30*_1d;
+  // Count all games that were actually started (gameHistory only contains started games)
+  const playedGames = stats.gameHistory || [];
+  function countGames(arr, ms) { return arr.filter(g => g.startTime && new Date(g.startTime).getTime() > now - ms).length; }
 
   const inRoom = socketRoom.size;
   res.json({
@@ -86,20 +88,20 @@ app.get('/api/stats', adminAuth, (req, res) => {
     activeRooms: rooms.size,
     roomList,
     totalRooms: stats.totalRooms,
-    totalGames: stats.totalGames,
+    totalGames: playedGames.length,
     totalConnections: stats.totalConnections,
     visitDay: count(cLog, _1d), visitWeek: count(cLog, _7d), visitMonth: count(cLog, _30d),
     roomDay: count(rLog, _1d), roomWeek: count(rLog, _7d), roomMonth: count(rLog, _30d),
-    gameDay: count(gLog, _1d), gameWeek: count(gLog, _7d), gameMonth: count(gLog, _30d),
-    // Players (人次 = total participations, 人 = unique names)
-    playerDay: (stats.gameHistory||[]).filter(g=>g.startTime&&new Date(g.startTime).getTime()>now-_1d).reduce((s,g)=>s+(g.playerNames||g.players||[]).length,0),
-    playerWeek: (stats.gameHistory||[]).filter(g=>g.startTime&&new Date(g.startTime).getTime()>now-_7d).reduce((s,g)=>s+(g.playerNames||g.players||[]).length,0),
-    playerMonth: (stats.gameHistory||[]).filter(g=>g.startTime&&new Date(g.startTime).getTime()>now-_30d).reduce((s,g)=>s+(g.playerNames||g.players||[]).length,0),
-    playerTotal: (stats.gameHistory||[]).reduce((s,g)=>s+(g.playerNames||g.players||[]).length,0),
-    uniquePlayerDay: new Set((stats.gameHistory||[]).filter(g=>g.startTime&&new Date(g.startTime).getTime()>now-_1d).flatMap(g=>{const p=g.playerNames||g.players||[];return p.map(x=>typeof x==='string'?x:x.name);})).size,
-    uniquePlayerWeek: new Set((stats.gameHistory||[]).filter(g=>g.startTime&&new Date(g.startTime).getTime()>now-_7d).flatMap(g=>{const p=g.playerNames||g.players||[];return p.map(x=>typeof x==='string'?x:x.name);})).size,
-    uniquePlayerMonth: new Set((stats.gameHistory||[]).filter(g=>g.startTime&&new Date(g.startTime).getTime()>now-_30d).flatMap(g=>{const p=g.playerNames||g.players||[];return p.map(x=>typeof x==='string'?x:x.name);})).size,
-    uniquePlayerTotal: new Set((stats.gameHistory||[]).flatMap(g=>{const p=g.playerNames||g.players||[];return p.map(x=>typeof x==='string'?x:x.name);})).size,
+    gameDay: countGames(playedGames, _1d), gameWeek: countGames(playedGames, _7d), gameMonth: countGames(playedGames, _30d),
+    // Players (人次 = total participations, 人 = unique names) — only count actually played games
+    playerDay: playedGames.filter(g=>g.startTime&&new Date(g.startTime).getTime()>now-_1d).reduce((s,g)=>s+(g.playerNames||g.players||[]).length,0),
+    playerWeek: playedGames.filter(g=>g.startTime&&new Date(g.startTime).getTime()>now-_7d).reduce((s,g)=>s+(g.playerNames||g.players||[]).length,0),
+    playerMonth: playedGames.filter(g=>g.startTime&&new Date(g.startTime).getTime()>now-_30d).reduce((s,g)=>s+(g.playerNames||g.players||[]).length,0),
+    playerTotal: playedGames.reduce((s,g)=>s+(g.playerNames||g.players||[]).length,0),
+    uniquePlayerDay: new Set(playedGames.filter(g=>g.startTime&&new Date(g.startTime).getTime()>now-_1d).flatMap(g=>{const p=g.playerNames||g.players||[];return p.map(x=>typeof x==='string'?x:x.name);})).size,
+    uniquePlayerWeek: new Set(playedGames.filter(g=>g.startTime&&new Date(g.startTime).getTime()>now-_7d).flatMap(g=>{const p=g.playerNames||g.players||[];return p.map(x=>typeof x==='string'?x:x.name);})).size,
+    uniquePlayerMonth: new Set(playedGames.filter(g=>g.startTime&&new Date(g.startTime).getTime()>now-_30d).flatMap(g=>{const p=g.playerNames||g.players||[];return p.map(x=>typeof x==='string'?x:x.name);})).size,
+    uniquePlayerTotal: new Set(playedGames.flatMap(g=>{const p=g.playerNames||g.players||[];return p.map(x=>typeof x==='string'?x:x.name);})).size,
     connLastHour: count(cLog, 3600000),
     roomHistory: (stats.roomHistory || []).slice(-100),
     // Mark truly active games
