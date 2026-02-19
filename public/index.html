@@ -499,7 +499,7 @@ function renderRoom() {
   const myRole = me?.role || 'freshman';
   const rs = document.getElementById('roleSelect');
   rs.innerHTML = Object.entries(ROLES).map(([k,v])=>`<div class="role-card${k===myRole?' selected':''}" onclick="selectRole('${k}')"><span class="re">${v.emoji}</span><span class="rn">${v.name}</span>${v.buff?`<span class="rd" style="color:#27ae60">✦ ${v.buff}</span>`:''}${v.debuff?`<span class="rd" style="color:#e74c3c">✧ ${v.debuff}</span>`:''}</div>`).join('');
-  document.getElementById('btnStart').style.display = myId===room.hostId ? '' : 'none';
+  document.getElementById('btnStart').style.display = '';
 }
 function selectRole(role){ socket.emit('select-role',{role}); }
 function copyCode() {

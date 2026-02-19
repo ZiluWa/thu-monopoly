@@ -458,7 +458,7 @@ io.on('connection', (socket) => {
   guarded(socket, 'start-game', 10, 30000, () => {
     const code = getCode(socket);
     const room = rooms.get(code);
-    if (!room || room.hostId !== socket.id || room.started) return;
+    if (!room || room.started) return;
     // Remove disconnected players before starting
     room.players = room.players.filter(p => !p.disconnected);
     room.players.forEach((p, i) => p.color = COLORS[i % COLORS.length]);
