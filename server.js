@@ -6,7 +6,13 @@ const fs = require('fs');
 
 const app = express();
 const server = createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  pingTimeout: 30000,
+  pingInterval: 10000,
+  connectionStateRecovery: {
+    maxDisconnectionDuration: 2 * 60 * 1000,
+  },
+});
 
 app.use(express.static(path.join(__dirname, 'public'), {
   etag: true,
@@ -145,17 +151,17 @@ const rooms = new Map();
 const socketRoom = new Map();
 
 const COLORS = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c'];
-const NAMES = ['入学报到','紫荆园','奖学金','清芬园','缴学费','东门','桃李园','学生会通知','听涛园','芝兰园','挂科补考','六教','校园网','四教','三教','南门','西操','奖学金','东操','综合体育馆','情人坡','李文正馆','学生会通知','美术学院','FIT楼','西门','大礼堂','新清华学堂','校园卡','蒙民伟音乐厅','被辅导员约谈','主楼','工字厅','奖学金','近春园','北门','学生会通知','苏世民书院','交书本费','二校门'];
-const PRICES = {1:600,3:600,5:2000,6:1000,8:1000,9:1200,11:1400,12:1500,13:1400,14:1600,15:2000,16:1800,18:1800,19:2000,21:2200,23:2200,24:2400,25:2000,26:2600,27:2600,28:1500,29:2800,31:3000,32:3000,34:3200,35:2000,37:3500,39:4000};
+const NAMES = ['入学报到','紫荆园','奖学金','清芬园','缴学费','东门','桃李园','学生会通知','听涛园','芝兰园','挂科补考','六教','校园网','四教','法学院','南门','紫荆操场','奖学金','北体育馆','综合体育馆','情人坡','李文正馆','学生会通知','美术学院','经管学院','西门','大礼堂','新清华学堂','校园卡','蒙民伟音乐厅','被辅导员约谈','主楼','工字厅','奖学金','C楼','北门','学生会通知','苏世民书院','交书本费','二校门'];
+const PRICES = {1:700,3:700,5:2500,6:1200,8:1200,9:1400,11:1700,12:1800,13:1700,14:1900,15:2500,16:2200,18:2200,19:2400,21:2600,23:2600,24:2900,25:2500,26:3100,27:3100,28:1800,29:3400,31:3600,32:3600,34:3800,35:2500,37:4200,39:4800};
 const BUILDING_COSTS = {1:500,3:500,6:500,8:500,9:500,11:1000,13:1000,14:1000,16:1000,18:1000,19:1000,21:1500,23:1500,24:1500,26:1500,27:1500,29:1500,31:2000,32:2000,34:2000,37:2000,39:2000};
 const COLOR_GROUPS = {brown:[1,3],lightblue:[6,8,9],pink:[11,13,14],orange:[16,18,19],red:[21,23,24],yellow:[26,27,29],green:[31,32,34],darkblue:[37,39]};
 const SPACE_GROUP = {}; for(const[g,ids] of Object.entries(COLOR_GROUPS)) ids.forEach(id=>SPACE_GROUP[id]=g);
 const ROLES = {
   freshman:      { name:'新生',   emoji:'🎒', startMoney:0, diceBonus:0 },
   athlete:       { name:'体育生', emoji:'🏃', startMoney:0, diceBonus:2 },
-  competitor:    { name:'竞赛生', emoji:'🏆', startMoney:-3000, diceBonus:0 },
+  competitor:    { name:'竞赛生', emoji:'🏆', startMoney:-2000, diceBonus:0 },
   alumni:        { name:'校友',   emoji:'🎓', startMoney:0, diceBonus:0 },
-  international: { name:'国际生', emoji:'🌍', startMoney:5000, diceBonus:0 },
+  international: { name:'国际生', emoji:'🌍', startMoney:3000, diceBonus:0 },
   talent:        { name:'特长生', emoji:'🎨', startMoney:0, diceBonus:0 },
   faculty:       { name:'教职工', emoji:'👔', startMoney:0, diceBonus:-1 },
 };
@@ -178,33 +184,33 @@ const DROP_REASONS = [
 ];
 
 const CHANCE_CARDS = [
-  { text: '获得"国家奖学金"！收取 ¥8,000', amount: 8000 },
-  { text: '在"挑战杯"中获奖，收取 ¥3,000', amount: 3000 },
-  { text: '自行车被偷了，支付 ¥500 买新车', amount: -500 },
-  { text: '论文发表在 Nature 上！收取 ¥5,000', amount: 5000 },
-  { text: '被选为学生会主席，每位玩家向你支付 ¥500', collect: 500 },
-  { text: '食堂饭卡充值故障，支付 ¥200', amount: -200 },
+  { text: '获得"国家奖学金"！收取 ¥5,000', amount: 5000 },
+  { text: '在"挑战杯"中获奖，收取 ¥2,000', amount: 2000 },
+  { text: '自行车被偷了，支付 ¥700 买新车', amount: -700 },
+  { text: '论文发表在 Nature 上！收取 ¥3,000', amount: 3000 },
+  { text: '被选为学生会主席，每位玩家向你支付 ¥300', collect: 300 },
+  { text: '食堂饭卡充值故障，支付 ¥300', amount: -300 },
   { text: '获得出国交换机会，前进到起点收取 ¥1,500', amount: 1500, moveTo: 0 },
-  { text: '宿舍违规用电被抓，支付 ¥500', amount: -500 },
-  { text: '获得创业大赛奖金，收取 ¥4,000', amount: 4000 },
-  { text: '期末复习太累进了校医院，支付 ¥400', amount: -400 },
-  { text: '被选中参加军训方阵表演，获得补贴 ¥1,000', amount: 1000 },
-  { text: '清华110周年校庆捐款，支付 ¥800', amount: -800 },
-  { text: '在SRT项目中表现优异，收取 ¥2,500', amount: 2500 },
-  { text: '深夜在紫操跑步被表白，对方请你吃大餐，收取 ¥500', amount: 500 },
-  { text: '选课系统崩溃，重选的课要买新教材，支付 ¥300', amount: -300 },
-  { text: '期末在C楼通宵赶DDL，咖啡外卖费 ¥300', amount: -300 },
+  { text: '宿舍违规用电被抓，支付 ¥700', amount: -700 },
+  { text: '获得创业大赛奖金，收取 ¥2,500', amount: 2500 },
+  { text: '期末复习太累进了校医院，支付 ¥500', amount: -500 },
+  { text: '被选中参加军训方阵表演，获得补贴 ¥600', amount: 600 },
+  { text: '清华110周年校庆捐款，支付 ¥1,000', amount: -1000 },
+  { text: '在SRT项目中表现优异，收取 ¥1,500', amount: 1500 },
+  { text: '深夜在紫操跑步被表白，对方请你吃大餐，收取 ¥300', amount: 300 },
+  { text: '选课系统崩溃，重选的课要买新教材，支付 ¥400', amount: -400 },
+  { text: '期末在C楼通宵赶DDL，咖啡外卖费 ¥400', amount: -400 },
 ];
 const CHEST_CARDS = [
-  { text: '获得"一二·九"奖学金，收取 ¥2,000', amount: 2000 },
-  { text: '助教工资到账，收取 ¥1,500', amount: 1500 },
-  { text: '获得"蒋南翔"奖学金，收取 ¥2,000', amount: 2000 },
-  { text: '银行转账错误，多收到 ¥1,000', amount: 1000 },
+  { text: '获得"一二·九"奖学金，收取 ¥1,200', amount: 1200 },
+  { text: '助教工资到账，收取 ¥900', amount: 900 },
+  { text: '获得"蒋南翔"奖学金，收取 ¥1,200', amount: 1200 },
+  { text: '银行转账错误，多收到 ¥600', amount: 600 },
   { text: '生日快乐！每位玩家向你支付 ¥100', collect: 100 },
-  { text: '获得"好读书"奖学金，收取 ¥500', amount: 500 },
-  { text: '科研项目经费到账，收取 ¥3,000', amount: 3000 },
-  { text: '获得社会实践优秀奖，收取 ¥800', amount: 800 },
-  { text: '获得企业赞助，收取 ¥2,500', amount: 2500 },
+  { text: '获得"好读书"奖学金，收取 ¥300', amount: 300 },
+  { text: '科研项目经费到账，收取 ¥1,800', amount: 1800 },
+  { text: '获得社会实践优秀奖，收取 ¥500', amount: 500 },
+  { text: '获得企业赞助，收取 ¥1,500', amount: 1500 },
   { text: '前往起点，收取 ¥1,500', amount: 1500, moveTo: 0 },
 ];
 
@@ -230,10 +236,15 @@ function addLog(room, text) {
 
 function broadcast(code) {
   const room = rooms.get(code);
-  if (room) io.to(code).emit('room-update', room);
+  if (!room) return;
+  // 不下发内部字段和玩家令牌（令牌泄露会被用来顶号）
+  const { _deleteTimer, _roomHistIndex, ...pub } = room;
+  pub.players = room.players.map(p => { const { token, ...rest } = p; return rest; });
+  io.to(code).emit('room-update', pub);
 }
 
 function advanceTurn(room) {
+  room.rolled = false;
   let next = room.currentTurn;
   for (let i = 0; i < room.players.length; i++) {
     next = (next + 1) % room.players.length;
@@ -339,7 +350,30 @@ function finalizeGame(room) {
   saveStats();
 }
 
-const ROOM_KEEP_ALIVE = 3 * 60 * 1000; // 3 minutes
+const ROOM_KEEP_ALIVE = 15 * 60 * 1000; // 15 minutes
+
+// Mark players whose socket no longer exists as disconnected (repairs ghost
+// entries left behind by missed disconnect events)
+function sweepGhosts(room) {
+  let changed = false;
+  for (const p of room.players) {
+    if (!p.disconnected && !io.sockets.sockets.has(p.id)) {
+      p.disconnected = true;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+// 将某个 socket 移出语音成员列表并通知房间内其他人
+function leaveVoice(room, code, socketId) {
+  if (!room || !Array.isArray(room.voice)) return;
+  const i = room.voice.indexOf(socketId);
+  if (i !== -1) {
+    room.voice.splice(i, 1);
+    io.to(code).emit('voice-peer-left', { id: socketId });
+  }
+}
 
 function leaveRoom(socket) {
   const code = socketRoom.get(socket.id);
@@ -347,6 +381,7 @@ function leaveRoom(socket) {
   const room = rooms.get(code);
   if (!room) { socketRoom.delete(socket.id); return; }
 
+  leaveVoice(room, code, socket.id);
   socket.leave(code);
   socketRoom.delete(socket.id);
   const idx = room.players.findIndex(p => p.id === socket.id);
@@ -380,13 +415,13 @@ io.on('connection', (socket) => {
   stats.connectionLog.push(Date.now());
 
   // create-room: max 5 per 30s
-  guarded(socket, 'create-room', 5, 30000, ({ name }) => {
+  guarded(socket, 'create-room', 5, 30000, ({ name, token }) => {
     leaveRoom(socket);
     const code = genCode();
     const room = {
       code, hostId: socket.id,
-      players: [{ id: socket.id, name: name||'房主', color: COLORS[0], money: 15000, position: 0, inJail: false, bankrupt: false, disconnected: false, role: 'freshman' }],
-      started: false, currentTurn: 0, round: 1, properties: {}, log: [], lastDice: [0,0],
+      players: [{ id: socket.id, token: token||null, name: name||'房主', color: COLORS[0], money: 10000, position: 0, inJail: false, jailTurns: 0, bankrupt: false, disconnected: false, role: 'freshman', ready: false }],
+      started: false, currentTurn: 0, round: 1, properties: {}, log: [], lastDice: [0,0], voice: [],
     };
     rooms.set(code, room);
     socketRoom.set(socket.id, code);
@@ -404,17 +439,48 @@ io.on('connection', (socket) => {
   });
 
   // join-room: max 5 per 15s
-  guarded(socket, 'join-room', 5, 15000, ({ code, name }) => {
-    leaveRoom(socket);
+  guarded(socket, 'join-room', 5, 15000, ({ code, name, token }) => {
     code = (code||'').toUpperCase().trim();
     const room = rooms.get(code);
     if (!room) return socket.emit('error-msg', '房间不存在，请检查代码');
 
-    // Reconnect disconnected player with same name (works for both started and waiting rooms)
-    const disc = room.players.findIndex(p => p.name === name && p.disconnected);
+    // This socket already has an entry in this room (connectionStateRecovery keeps
+    // the same socket.id across brief disconnects, and the page re-sends join-room
+    // on every reconnect) — just re-attach, never create a second entry.
+    const own = room.players.find(p => p.id === socket.id);
+    if (own) {
+      const wasDisconnected = own.disconnected;
+      own.disconnected = false;
+      socketRoom.set(socket.id, code);
+      socket.join(code);
+      if (room._deleteTimer) { clearTimeout(room._deleteTimer); room._deleteTimer = null; }
+      if (wasDisconnected) addLog(room, `${own.name} 重新连接`);
+      broadcast(code);
+      return;
+    }
+
+    leaveRoom(socket); // joining from another room / stale mapping
+
+    // Entries still marked online but whose socket is gone are ghosts — mark them
+    // disconnected so they can be reclaimed by name below and hidden from the lobby.
+    sweepGhosts(room);
+
+    // Reconnect: prefer token match (same browser tab, works even if the old
+    // socket hasn't timed out yet, e.g. after an unclean page refresh), then
+    // fall back to name match among disconnected players.
+    let disc = -1;
+    if (token) disc = room.players.findIndex(p => p.token === token);
+    if (disc === -1) disc = room.players.findIndex(p => p.name === name && p.disconnected);
     if (disc !== -1) {
+      const oldSocketId = room.players[disc].id;
       room.players[disc].id = socket.id;
       room.players[disc].disconnected = false;
+      if (oldSocketId !== socket.id) {
+        socketRoom.delete(oldSocketId);
+        leaveVoice(room, code, oldSocketId);
+        const oldSocket = io.sockets.sockets.get(oldSocketId);
+        if (oldSocket) oldSocket.leave(code);
+      }
       socketRoom.set(socket.id, code);
       socket.join(code);
       if (room._deleteTimer) { clearTimeout(room._deleteTimer); room._deleteTimer = null; }
@@ -423,13 +489,18 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // Name already taken by a live player — reject instead of hijacking their slot
+    if (room.players.some(p => p.name === name && !p.disconnected)) {
+      return socket.emit('error-msg', '该昵称已被房间内玩家使用，请换一个名字');
+    }
+
     if (room.started) return socket.emit('error-msg', '游戏已开始，无法加入');
     const activePlayers = room.players.filter(p => !p.disconnected).length;
     if (activePlayers >= 6) return socket.emit('error-msg', '房间已满（最多6人）');
 
     room.players.push({
-      id: socket.id, name: name||`玩家${room.players.length+1}`, color: COLORS[room.players.length % COLORS.length],
-      money: 15000, position: 0, inJail: false, bankrupt: false, disconnected: false, role: 'freshman',
+      id: socket.id, token: token||null, name: name||`玩家${room.players.length+1}`, color: COLORS[room.players.length % COLORS.length],
+      money: 10000, position: 0, inJail: false, jailTurns: 0, bankrupt: false, disconnected: false, role: 'freshman', ready: false,
     });
     socketRoom.set(socket.id, code);
     socket.join(code);
@@ -451,18 +522,33 @@ io.on('connection', (socket) => {
     const room = rooms.get(code);
     if (!room || room.started) return;
     const p = room.players.find(pl => pl.id === socket.id);
-    if (p) { p.role = role; broadcast(code); }
+    if (p) { p.role = role; p.ready = false; broadcast(code); }
   });
 
-  // start-game: max 10 per 30s
-  guarded(socket, 'start-game', 10, 30000, () => {
+  // toggle-ready
+  guarded(socket, 'toggle-ready', 10, 5000, () => {
     const code = getCode(socket);
     const room = rooms.get(code);
     if (!room || room.started) return;
+    const p = room.players.find(pl => pl.id === socket.id);
+    if (!p) return;
+    p.ready = !p.ready;
+    sweepGhosts(room); // 幽灵玩家不应阻止开局
+    addLog(room, `${p.name} ${p.ready ? '已准备' : '取消准备'}`);
+    broadcast(code);
+    // Auto-start when all active players ready and >= 2
+    const active = room.players.filter(pl => !pl.disconnected);
+    if (active.length >= 2 && active.every(pl => pl.ready)) {
+      startGame(room, code);
+    }
+  });
+
+  function startGame(room, code) {
+    if (room.started) return;
     // Remove disconnected players before starting
     room.players = room.players.filter(p => !p.disconnected);
     room.players.forEach((p, i) => p.color = COLORS[i % COLORS.length]);
-    if (room.players.length < 2) return socket.emit('error-msg', '至少需要2名玩家');
+    if (room.players.length < 2) return;
     room.started = true;
     room.startTime = Date.now();
     stats.totalGames++;
@@ -488,6 +574,61 @@ io.on('connection', (socket) => {
     const roleInfo = room.players.map(p => `${ROLES[p.role]?.emoji||'🎒'} ${p.name}(${ROLES[p.role]?.name||'新生'})`).join('、');
     addLog(room, `游戏开始！${roleInfo}`);
     broadcast(code);
+  }
+
+  // jail-action: pay bail or roll for doubles
+  guarded(socket, 'jail-action', 5, 5000, ({ action }) => {
+    const code = getCode(socket);
+    const room = rooms.get(code);
+    if (!room || !room.started) return;
+    const ci = room.currentTurn;
+    if (room.players[ci].id !== socket.id) return;
+    const p = room.players[ci];
+    if (!p.inJail) return;
+
+    if (action === 'pay') {
+      p.money -= 500;
+      p.inJail = false;
+      p.jailTurns = 0;
+      addLog(room, `${p.name} 交了 ¥500 补考费，通过补考！`);
+      checkBankruptcy(room, code);
+      broadcast(code);
+    } else if (action === 'roll') {
+      const d1 = Math.floor(Math.random()*6)+1;
+      const d2 = Math.floor(Math.random()*6)+1;
+      room.lastDice = [d1, d2];
+      if (d1 === d2) {
+        p.inJail = false;
+        p.jailTurns = 0;
+        const roleBonus = ROLES[p.role]?.diceBonus || 0;
+        const total = Math.max(d1 + d2 + roleBonus, 2);
+        const oldPos = p.position;
+        p.position = (p.position + total) % 40;
+        addLog(room, `${p.name} 掷出 ${d1}+${d2}=${d1+d2} (双数！)，补考通过！前进到「${NAMES[p.position]}」`);
+        if (p.position < oldPos) {
+          const goMoney = p.role === 'alumni' ? 2000 : 1500;
+          p.money += goMoney;
+          addLog(room, `${p.name} 经过起点 +¥${goMoney.toLocaleString()}`);
+        }
+        room.rolled = true;
+        io.to(code).emit('dice-rolled', { dice:[d1,d2], playerIndex:ci, from:oldPos, to:p.position, jailBreak: true });
+      } else {
+        p.jailTurns++;
+        if (p.jailTurns >= 3) {
+          p.money -= 500;
+          p.inJail = false;
+          p.jailTurns = 0;
+          addLog(room, `${p.name} 掷出 ${d1}+${d2}，第三次未掷出双数，强制交 ¥500 补考费`);
+          checkBankruptcy(room, code);
+        } else {
+          addLog(room, `${p.name} 掷出 ${d1}+${d2}，未掷出双数，继续补考...`);
+        }
+        room.rolled = true;
+        io.to(code).emit('jail-roll-failed', { dice:[d1,d2], playerIndex:ci, jailTurns: p.jailTurns });
+        advanceTurn(room);
+      }
+      broadcast(code);
+    }
   });
 
   // roll-dice: max 5 per 5s
@@ -498,6 +639,7 @@ io.on('connection', (socket) => {
     const ci = room.currentTurn;
     if (room.players[ci].id !== socket.id) return;
     if (room.rolled) return;
+    if (room.players[ci].inJail) return;
     room.rolled = true;
     const d1 = Math.floor(Math.random()*6)+1;
     const d2 = Math.floor(Math.random()*6)+1;
@@ -514,7 +656,7 @@ io.on('connection', (socket) => {
 
     // Pass go (crossed or landed on position 0)
     if (p.position < oldPos) {
-      const goMoney = p.role === 'alumni' ? 4000 : 2000;
+      const goMoney = p.role === 'alumni' ? 2000 : 1500;
       p.money += goMoney;
       addLog(room, `${p.name} 经过起点 +¥${goMoney.toLocaleString()}`);
     }
@@ -525,17 +667,7 @@ io.on('connection', (socket) => {
     else if (p.position === 38) { p.money -= 1000; addLog(room, `${p.name} 交书本费 -¥1,000`); }
     else if (p.position === 30) { p.position = 10; p.inJail = true; addLog(room, `${p.name} 被辅导员约谈，进入补考！`); }
     else if (p.position === 20) {
-      // 情人坡：如果有其他人也在这里，两人都扣钱
-      const dates = room.players.filter(o => o !== p && !o.bankrupt && !o.disconnected && o.position === 20);
-      if (dates.length > 0) {
-        const cost = 1000;
-        p.money -= cost;
-        addLog(room, `💕 ${p.name} 在情人坡约会，花了 ¥${cost.toLocaleString()}`);
-        for (const d of dates) {
-          d.money -= cost;
-          addLog(room, `💕 ${d.name} 也在情人坡约会，花了 ¥${cost.toLocaleString()}`);
-        }
-      }
+      addLog(room, `💕 ${p.name} 在情人坡休息`);
     }
 
     // Chance / Chest cards
@@ -564,14 +696,14 @@ io.on('connection', (socket) => {
     if (prop && prop.owner !== ci) {
       const sp = {1:1,3:3,6:6,8:8,9:9,11:11,13:13,14:14,16:16,18:18,19:19,21:21,23:23,24:24,26:26,27:27,29:29,31:31,32:32,34:34,37:37,39:39};
       const RENTS = {
-        1:[30,60,150,450,1350,2400],3:[60,120,300,900,2700,4800],
-        6:[90,180,450,1350,4050,6000],8:[90,180,450,1350,4050,6000],9:[120,240,600,1500,4500,6750],
-        11:[150,300,750,2250,6750,9375],13:[150,300,750,2250,6750,9375],14:[180,360,900,2700,7500,10500],
-        16:[210,420,1050,3000,8250,11250],18:[210,420,1050,3000,8250,11250],19:[240,480,1200,3300,9000,12000],
-        21:[270,540,1350,3750,10500,13125],23:[270,540,1350,3750,10500,13125],24:[300,600,1500,4500,11250,13875],
-        26:[330,660,1650,4950,12000,14625],27:[330,660,1650,4950,12000,14625],29:[360,720,1800,5400,12750,15375],
-        31:[390,780,1950,5850,13500,16500],32:[390,780,1950,5850,13500,16500],34:[420,840,2250,6750,15000,18000],
-        37:[525,1050,2625,7500,16500,19500],39:[750,1500,3000,9000,21000,25500]
+        1:[50,100,250,700,2000,3600],3:[100,200,450,1400,4000,7200],
+        6:[150,300,700,2000,6000,9000],8:[150,300,700,2000,6000,9000],9:[200,400,900,2250,6750,10000],
+        11:[250,500,1100,3400,10000,14000],13:[250,500,1100,3400,10000,14000],14:[300,550,1350,4000,11000,15500],
+        16:[350,650,1600,4500,12500,17000],18:[350,650,1600,4500,12500,17000],19:[400,750,1800,5000,13500,18000],
+        21:[400,800,2000,5600,15500,19500],23:[400,800,2000,5600,15500,19500],24:[450,900,2250,6750,17000,21000],
+        26:[500,1000,2500,7500,18000,22000],27:[500,1000,2500,7500,18000,22000],29:[550,1100,2700,8000,19000,23000],
+        31:[600,1200,2900,8800,20000,25000],32:[600,1200,2900,8800,20000,25000],34:[650,1300,3400,10000,22500,27000],
+        37:[800,1600,4000,11000,25000,29000],39:[1100,2250,4500,13500,31500,38000]
       };
       const owner = room.players[prop.owner];
       let rent = 0;
@@ -587,11 +719,11 @@ io.on('connection', (socket) => {
       } else if ([5,15,25,35].includes(p.position)) {
         // Railroad
         const rrCount = [5,15,25,35].filter(id=>room.properties[id]&&room.properties[id].owner===prop.owner).length;
-        rent = [0,375,750,1500,3000][rrCount];
+        rent = [0,500,1000,2000,4000][rrCount];
       } else if ([12,28].includes(p.position)) {
         // Utility
         const uCount = [12,28].filter(id=>room.properties[id]&&room.properties[id].owner===prop.owner).length;
-        rent = total * (uCount===2?15:6);
+        rent = total * (uCount===2?20:8);
       }
       if (rent > 0) {
         // Role bonuses for rent
@@ -692,7 +824,7 @@ io.on('connection', (socket) => {
     if (!room || !room.started) return;
     const p = room.players[room.currentTurn];
     switch(action) {
-      case 'passgo': { const gm=p.role==='alumni'?4000:2000; p.money+=gm; addLog(room,`${p.name} 经过起点 +¥${gm.toLocaleString()}`); break; }
+      case 'passgo': { const gm=p.role==='alumni'?2000:1500; p.money+=gm; addLog(room,`${p.name} 经过起点 +¥${gm.toLocaleString()}`); break; }
       case 'tax2000': p.money-=2000; addLog(room,`${p.name} 缴学费 -¥2,000`); break;
       case 'tax1000': p.money-=1000; addLog(room,`${p.name} 交书本费 -¥1,000`); break;
     }
@@ -767,6 +899,38 @@ io.on('connection', (socket) => {
       finalizeGame(room);
     }
     broadcast(code);
+  });
+
+  // ===== 语音聊天信令 =====
+  guarded(socket, 'voice-join', 10, 10000, () => {
+    const code = getCode(socket);
+    const room = rooms.get(code);
+    if (!room) return;
+    if (!Array.isArray(room.voice)) room.voice = [];
+    // 清掉 socket 已不存在的成员
+    room.voice = room.voice.filter(id => io.sockets.sockets.has(id));
+    const existing = room.voice.filter(id => id !== socket.id);
+    if (!room.voice.includes(socket.id)) room.voice.push(socket.id);
+    // 告诉新成员当前已有哪些人，由新成员向他们发起连接
+    socket.emit('voice-members', { ids: existing });
+    broadcast(code);
+  });
+
+  guarded(socket, 'voice-leave', 10, 10000, () => {
+    const code = getCode(socket);
+    const room = rooms.get(code);
+    if (!room) return;
+    leaveVoice(room, code, socket.id);
+    broadcast(code);
+  });
+
+  // WebRTC 信令转发（offer/answer/ICE，频率较高）
+  guarded(socket, 'voice-signal', 300, 10000, (payload) => {
+    const { to, data } = payload || {};
+    const code = getCode(socket);
+    if (!code || !to || !data) return;
+    if (socketRoom.get(to) !== code) return; // 只允许同房间内转发
+    io.to(to).emit('voice-signal', { from: socket.id, data });
   });
 
   // chat: max 5 per 10s (stricter)

@@ -151,6 +151,11 @@
     /* ===== CHAT ===== */
     .chat-toggle{position:fixed;bottom:16px;right:16px;width:48px;height:48px;border-radius:50%;background:var(--purple);color:#fff;border:none;font-size:20px;box-shadow:0 4px 14px rgba(0,0,0,.2);z-index:120;display:none}
     .chat-toggle .badge{position:absolute;top:-2px;right:-2px;min-width:18px;height:18px;background:#e74c3c;border-radius:9px;font-size:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;padding:0 4px}
+    .voice-toggle{position:fixed;bottom:72px;right:16px;width:48px;height:48px;border-radius:50%;background:#95a5a6;color:#fff;border:none;font-size:20px;box-shadow:0 4px 14px rgba(0,0,0,.2);z-index:120;display:none;align-items:center;justify-content:center}
+    .voice-toggle.on{background:#27ae60;animation:voicePulse 2s infinite}
+    .mute-toggle{position:fixed;bottom:128px;right:16px;width:48px;height:48px;border-radius:50%;background:#27ae60;color:#fff;border:none;font-size:20px;box-shadow:0 4px 14px rgba(0,0,0,.2);z-index:120;display:none;align-items:center;justify-content:center}
+    .mute-toggle.muted{background:#e74c3c}
+    @keyframes voicePulse{0%,100%{box-shadow:0 4px 14px rgba(39,174,96,.5)}50%{box-shadow:0 4px 20px rgba(39,174,96,.9)}}
     .chat-panel{position:fixed;bottom:72px;right:12px;width:min(320px,calc(100vw - 24px));max-height:360px;background:#fff;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.15);z-index:120;display:flex;flex-direction:column;overflow:hidden}
     .chat-head{background:var(--purple);color:#fff;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:14px}
     .chat-head button{background:none;border:none;color:#fff;font-size:18px}
@@ -204,7 +209,7 @@
     @media print{
       body>*{display:none!important}
       #view-game{display:block!important}
-      .topbar,.controls,.chat-toggle,.chat-panel,.dropdown,.game-footer{display:none!important}
+      .topbar,.controls,.chat-toggle,.chat-panel,.voice-toggle,.mute-toggle,.dropdown,.game-footer{display:none!important}
       .board-wrap{padding:0}
       .board{max-width:none;width:260mm;height:260mm;border-width:2px;
         grid-template-columns:36.1mm repeat(9,20.9mm) 36.1mm;
@@ -258,7 +263,7 @@
       <div id="roomPlayers"></div>
     </div>
     <div class="room-btns">
-      <button class="btn-go" id="btnStart" onclick="emitStart()">开始游戏</button>
+      <button class="btn-go" id="btnReady" onclick="toggleReady()">准备</button>
       <button class="btn-out" onclick="emitLeave()">离开</button>
     </div>
     <div class="footer-info" style="margin-top:16px">遇到bug欢迎加微信反馈：<b>REBL_unofficial</b><br>作者：子路</div>
@@ -299,6 +304,7 @@
         <div class="bc-last-log" id="bcLastLog"></div>
         <div class="bc-turn" id="bcTurn"></div>
         <button class="btn-roll" id="bcRollBtn" onclick="emitRoll()">掷骰子 🎲</button>
+        <button class="btn-roll" id="bcEndTurnBtn" onclick="emitEndTurn()" style="display:none;background:#27ae60">结束回合 ➜</button>
         <div class="move-info" id="moveInfo" style="display:none"></div>
       </div>
     </div>
@@ -330,6 +336,11 @@
   </div>
 </div>
 
+<!-- ==================== VOICE（房间等待和游戏中都可用） ==================== -->
+<button class="voice-toggle" id="voiceToggle" onclick="toggleVoice()" title="语音聊天">🎤</button>
+<button class="mute-toggle" id="muteToggle" onclick="toggleMute()" title="静音/取消静音">🔊</button>
+<div id="voiceAudios" style="display:none"></div>
+
 <!-- ==================== OVERLAYS ==================== -->
 <div class="overlay" id="ov-cards">
   <div class="ov-bar"><h3>卡牌</h3><button onclick="closeOverlay('cards')">✕</button></div>
@@ -346,9 +357,10 @@
   <div class="ov-bar"><h3>游戏规则</h3><button onclick="closeOverlay('rules')">✕</button></div>
   <div class="ov-body rules-body">
     <h3>游戏简介</h3><p>清华大富翁是以清华大学为主题的桌游，2~6名玩家在清华校园中购买地产、收取租金，成为最后的"清华首富"！</p>
-    <h3>游戏准备</h3><ul><li>打印棋盘（建议A3彩色）</li><li>准备骰子两颗（或用在线掷骰子）</li><li>准备棋子（硬币、橡皮等均可）</li><li>每人起始资金 ¥15,000</li></ul>
-    <h3>基本规则</h3><ul><li><b>掷骰子前进</b>：每回合掷两颗骰子，按点数前进</li><li><b>经过/到达起点</b>：收取 ¥2,000</li><li><b>购买地产</b>：到达无主地产可按标价购买</li><li><b>收取租金</b>：到达他人地产需支付租金</li><li><b>升级地产</b>：落到自己的地产可花钱升级，租金大幅提升</li><li><b>同色加成</b>：集齐同色所有地产，租金翻倍</li><li><b>校门</b>：1个¥375 / 2个¥750 / 3个¥1,500 / 4个¥3,000</li><li><b>校园网/校园卡</b>：骰子×6（1个）或×15（2个）</li></ul>
-    <h3>特殊格子</h3><ul><li><b>学生会通知/奖学金</b>：抽卡执行</li><li><b>缴学费</b>：-¥2,000 / <b>交书本费</b>：-¥1,000</li><li><b>挂科补考（监狱）</b>：掷双数或付¥500出狱</li><li><b>被辅导员约谈</b>：直接进监狱</li><li><b>情人坡</b>：安全休息</li></ul>
+    <h3>游戏准备</h3><ul><li>打印棋盘（建议A3彩色）</li><li>准备骰子两颗（或用在线掷骰子）</li><li>准备棋子（硬币、橡皮等均可）</li><li>每人起始资金 ¥10,000</li></ul>
+    <h3>基本规则</h3><ul><li><b>掷骰子前进</b>：每回合掷两颗骰子，按点数前进</li><li><b>经过/到达起点</b>：收取 ¥1,500</li><li><b>购买地产</b>：到达无主地产可按标价购买</li><li><b>收取租金</b>：到达他人地产需支付租金</li><li><b>升级地产</b>：落到自己的地产可花钱升级，租金大幅提升</li><li><b>同色加成</b>：集齐同色所有地产，租金翻倍</li><li><b>校门</b>：1个¥500 / 2个¥1,000 / 3个¥2,000 / 4个¥4,000</li><li><b>校园网/校园卡</b>：租金=骰子点数×8（1个）或×20（2个），不可升级</li></ul>
+    <h3>特殊格子</h3><ul><li><b>学生会通知/奖学金</b>：抽卡执行</li><li><b>缴学费</b>：-¥2,000 / <b>交书本费</b>：-¥1,000</li><li><b>挂科补考（监狱）</b>：每回合选择交¥500补考费直接出狱，或掷骰子（双数出狱，非双数继续补考）；连续3回合未掷出双数则强制交¥500</li><li><b>被辅导员约谈</b>：直接进入补考</li><li><b>情人坡</b>：安全休息，不产生任何费用</li></ul>
+    <h3>校园网/校园卡</h3><ul><li>其他玩家踩到你的校园网/校园卡时，按骰子点数×倍率支付租金</li><li>拥有1个：租金 = 骰子点数 × 8</li><li>拥有2个：租金 = 骰子点数 × 20</li><li>不可升级</li></ul>
     <h3>胜利条件</h3><p>最后一名未退学的玩家顺利毕业获胜，或约定时间后资产最多者获胜。</p>
   </div>
 </div>
@@ -361,45 +373,45 @@
 // ===== DATA =====
 const S=[
   {id:0,n:'入学报到',t:'go',i:'🎓'},
-  {id:1,n:'紫荆园',t:'property',g:'brown',p:600,bc:500,r:[30,60,150,450,1350,2400],i:'🍜'},
+  {id:1,n:'紫荆园',t:'property',g:'brown',p:700,bc:500,r:[50,100,250,700,2000,3600],i:'🍜'},
   {id:2,n:'奖学金',t:'chest',i:'💰'},
-  {id:3,n:'清芬园',t:'property',g:'brown',p:600,bc:500,r:[60,120,300,900,2700,4800],i:'🍛'},
+  {id:3,n:'清芬园',t:'property',g:'brown',p:700,bc:500,r:[100,200,450,1400,4000,7200],i:'🍛'},
   {id:4,n:'缴学费',t:'tax',a:2000,i:'💸'},
-  {id:5,n:'东门',t:'railroad',p:2000,i:'🚪'},
-  {id:6,n:'桃李园',t:'property',g:'lightblue',p:1000,bc:500,r:[90,180,450,1350,4050,6000],i:'🍱'},
+  {id:5,n:'东门',t:'railroad',p:2500,i:'🚪'},
+  {id:6,n:'桃李园',t:'property',g:'lightblue',p:1200,bc:500,r:[150,300,700,2000,6000,9000],i:'🍱'},
   {id:7,n:'学生会通知',t:'chance',i:'📋'},
-  {id:8,n:'听涛园',t:'property',g:'lightblue',p:1000,bc:500,r:[90,180,450,1350,4050,6000],i:'🍲'},
-  {id:9,n:'芝兰园',t:'property',g:'lightblue',p:1200,bc:500,r:[120,240,600,1500,4500,6750],i:'🥘'},
+  {id:8,n:'听涛园',t:'property',g:'lightblue',p:1200,bc:500,r:[150,300,700,2000,6000,9000],i:'🍲'},
+  {id:9,n:'芝兰园',t:'property',g:'lightblue',p:1400,bc:500,r:[200,400,900,2250,6750,10000],i:'🥘'},
   {id:10,n:'挂科补考',t:'jail',i:'📝'},
-  {id:11,n:'六教',t:'property',g:'pink',p:1400,bc:1000,r:[150,300,750,2250,6750,9375],i:'📚'},
-  {id:12,n:'校园网',t:'utility',p:1500,i:'📶'},
-  {id:13,n:'四教',t:'property',g:'pink',p:1400,bc:1000,r:[150,300,750,2250,6750,9375],i:'🏫'},
-  {id:14,n:'三教',t:'property',g:'pink',p:1600,bc:1000,r:[180,360,900,2700,7500,10500],i:'🎒'},
-  {id:15,n:'南门',t:'railroad',p:2000,i:'🚪'},
-  {id:16,n:'西操',t:'property',g:'orange',p:1800,bc:1000,r:[210,420,1050,3000,8250,11250],i:'⚽'},
+  {id:11,n:'六教',t:'property',g:'pink',p:1700,bc:1000,r:[250,500,1100,3400,10000,14000],i:'📚'},
+  {id:12,n:'校园网',t:'utility',p:1800,i:'📶'},
+  {id:13,n:'四教',t:'property',g:'pink',p:1700,bc:1000,r:[250,500,1100,3400,10000,14000],i:'🏫'},
+  {id:14,n:'法学院',t:'property',g:'pink',p:1900,bc:1000,r:[300,550,1350,4000,11000,15500],i:'⚖️'},
+  {id:15,n:'南门',t:'railroad',p:2500,i:'🚪'},
+  {id:16,n:'紫荆操场',t:'property',g:'orange',p:2200,bc:1000,r:[350,650,1600,4500,12500,17000],i:'🎯'},
   {id:17,n:'奖学金',t:'chest',i:'💰'},
-  {id:18,n:'东操',t:'property',g:'orange',p:1800,bc:1000,r:[210,420,1050,3000,8250,11250],i:'🏀'},
-  {id:19,n:'综合体育馆',t:'property',g:'orange',p:2000,bc:1000,r:[240,480,1200,3300,9000,12000],i:'🏟️'},
+  {id:18,n:'北体育馆',t:'property',g:'orange',p:2200,bc:1000,r:[350,650,1600,4500,12500,17000],i:'🏋️'},
+  {id:19,n:'综合体育馆',t:'property',g:'orange',p:2400,bc:1000,r:[400,750,1800,5000,13500,18000],i:'🏟️'},
   {id:20,n:'情人坡',t:'parking',i:'💕'},
-  {id:21,n:'李文正馆',t:'property',g:'red',p:2200,bc:1500,r:[270,540,1350,3750,10500,13125],i:'📖'},
+  {id:21,n:'李文正馆',t:'property',g:'red',p:2600,bc:1500,r:[400,800,2000,5600,15500,19500],i:'📖'},
   {id:22,n:'学生会通知',t:'chance',i:'📋'},
-  {id:23,n:'美术学院',t:'property',g:'red',p:2200,bc:1500,r:[270,540,1350,3750,10500,13125],i:'🎨'},
-  {id:24,n:'FIT楼',t:'property',g:'red',p:2400,bc:1500,r:[300,600,1500,4500,11250,13875],i:'💻'},
-  {id:25,n:'西门',t:'railroad',p:2000,i:'🚪'},
-  {id:26,n:'大礼堂',t:'property',g:'yellow',p:2600,bc:1500,r:[330,660,1650,4950,12000,14625],i:'🏛️'},
-  {id:27,n:'新清华学堂',t:'property',g:'yellow',p:2600,bc:1500,r:[330,660,1650,4950,12000,14625],i:'🎭'},
-  {id:28,n:'校园卡',t:'utility',p:1500,i:'💳'},
-  {id:29,n:'蒙民伟音乐厅',t:'property',g:'yellow',p:2800,bc:1500,r:[360,720,1800,5400,12750,15375],i:'🎵'},
+  {id:23,n:'美术学院',t:'property',g:'red',p:2600,bc:1500,r:[400,800,2000,5600,15500,19500],i:'🎨'},
+  {id:24,n:'经管学院',t:'property',g:'red',p:2900,bc:1500,r:[450,900,2250,6750,17000,21000],i:'💼'},
+  {id:25,n:'西门',t:'railroad',p:2500,i:'🚪'},
+  {id:26,n:'大礼堂',t:'property',g:'yellow',p:3100,bc:1500,r:[500,1000,2500,7500,18000,22000],i:'🏛️'},
+  {id:27,n:'新清华学堂',t:'property',g:'yellow',p:3100,bc:1500,r:[500,1000,2500,7500,18000,22000],i:'🎭'},
+  {id:28,n:'校园卡',t:'utility',p:1800,i:'💳'},
+  {id:29,n:'蒙民伟音乐厅',t:'property',g:'yellow',p:3400,bc:1500,r:[550,1100,2700,8000,19000,23000],i:'🎵'},
   {id:30,n:'被辅导员约谈',t:'gotojail',i:'😱'},
-  {id:31,n:'主楼',t:'property',g:'green',p:3000,bc:2000,r:[390,780,1950,5850,13500,16500],i:'🏢'},
-  {id:32,n:'工字厅',t:'property',g:'green',p:3000,bc:2000,r:[390,780,1950,5850,13500,16500],i:'🏯'},
+  {id:31,n:'主楼',t:'property',g:'green',p:3600,bc:2000,r:[600,1200,2900,8800,20000,25000],i:'🏢'},
+  {id:32,n:'工字厅',t:'property',g:'green',p:3600,bc:2000,r:[600,1200,2900,8800,20000,25000],i:'🏯'},
   {id:33,n:'奖学金',t:'chest',i:'💰'},
-  {id:34,n:'近春园',t:'property',g:'green',p:3200,bc:2000,r:[420,840,2250,6750,15000,18000],i:'🌸'},
-  {id:35,n:'北门',t:'railroad',p:2000,i:'🚪'},
+  {id:34,n:'C楼',t:'property',g:'green',p:3800,bc:2000,r:[650,1300,3400,10000,22500,27000],i:'📐'},
+  {id:35,n:'北门',t:'railroad',p:2500,i:'🚪'},
   {id:36,n:'学生会通知',t:'chance',i:'📋'},
-  {id:37,n:'苏世民书院',t:'property',g:'darkblue',p:3500,bc:2000,r:[525,1050,2625,7500,16500,19500],i:'🌍'},
+  {id:37,n:'苏世民书院',t:'property',g:'darkblue',p:4200,bc:2000,r:[800,1600,4000,11000,25000,29000],i:'🌍'},
   {id:38,n:'交书本费',t:'tax',a:1000,i:'📕'},
-  {id:39,n:'二校门',t:'property',g:'darkblue',p:4000,bc:2000,r:[750,1500,3000,9000,21000,25500],i:'⛩️'},
+  {id:39,n:'二校门',t:'property',g:'darkblue',p:4800,bc:2000,r:[1100,2250,4500,13500,31500,38000],i:'⛩️'},
 ];
 const GC={brown:'#8B4513',lightblue:'#87CEEB',pink:'#DB7093',orange:'#FF8C00',red:'#DC143C',yellow:'#FFD700',green:'#228B22',darkblue:'#191970'};
 const GN={brown:'食堂区(棕)',lightblue:'食堂区(蓝)',pink:'教学楼(粉)',orange:'运动场(橙)',red:'学术楼(红)',yellow:'文化场馆(黄)',green:'历史名胜(绿)',darkblue:'标志建筑(蓝)'};
@@ -407,48 +419,111 @@ const CG={brown:[1,3],lightblue:[6,8,9],pink:[11,13,14],orange:[16,18,19],red:[2
 const ROLES={
   freshman:      {name:'新生',   emoji:'🎒',buff:'无特殊效果',debuff:''},
   athlete:       {name:'体育生', emoji:'🏃',buff:'每次掷骰多走2步',debuff:'踩到食堂(棕/蓝)付双倍租金'},
-  competitor:    {name:'竞赛生', emoji:'🏆',buff:'盖房子费用减半',debuff:'起始资金少¥3000(¥12000)'},
-  alumni:        {name:'校友',   emoji:'🎓',buff:'经过起点拿¥4000(别人拿¥2000)',debuff:'买地产贵25%'},
-  international: {name:'国际生', emoji:'🌍',buff:'起始资金多¥5000(¥20000)',debuff:'踩到别人地产多付30%租金'},
+  competitor:    {name:'竞赛生', emoji:'🏆',buff:'盖房子费用减半',debuff:'起始资金少¥2000(¥8000)'},
+  alumni:        {name:'校友',   emoji:'🎓',buff:'经过起点拿¥3000(别人拿¥2000)',debuff:'买地产贵25%'},
+  international: {name:'国际生', emoji:'🌍',buff:'起始资金多¥3000(¥13000)',debuff:'踩到别人地产多付30%租金'},
   talent:        {name:'特长生', emoji:'🎨',buff:'拥有的文化场馆(黄)收双倍租金',debuff:'踩到运动场(橙)付双倍租金'},
   faculty:       {name:'教职工', emoji:'👔',buff:'买地产打7折',debuff:'每次掷骰少走1步'},
 };
 const CHANCE=[
-  '获得"国家奖学金"！收取 ¥8,000','在"挑战杯"中获奖，收取 ¥3,000','自行车被偷了，支付 ¥500 买新车',
-  '论文发表在 Nature 上！收取 ¥5,000','被选为学生会主席，每位玩家向你支付 ¥500','食堂饭卡充值故障，支付 ¥200',
-  '获得出国交换机会，前进到起点收取 ¥1,500','宿舍违规用电被抓，支付 ¥500','获得创业大赛奖金，收取 ¥4,000','期末复习太累进了校医院，支付 ¥400',
-  '被选中参加军训方阵表演，获得补贴 ¥1,000','清华110周年校庆捐款，支付 ¥800','在SRT项目中表现优异，收取 ¥2,500',
-  '深夜在紫操跑步被表白，对方请你吃大餐，收取 ¥500','选课系统崩溃，重选的课要买新教材，支付 ¥300','期末在C楼通宵赶DDL，咖啡外卖费 ¥300',
+  '获得"国家奖学金"！收取 ¥5,000','在"挑战杯"中获奖，收取 ¥2,000','自行车被偷了，支付 ¥700 买新车',
+  '论文发表在 Nature 上！收取 ¥3,000','被选为学生会主席，每位玩家向你支付 ¥300','食堂饭卡充值故障，支付 ¥300',
+  '获得出国交换机会，前进到起点收取 ¥1,500','宿舍违规用电被抓，支付 ¥700','获得创业大赛奖金，收取 ¥2,500','期末复习太累进了校医院，支付 ¥500',
+  '被选中参加军训方阵表演，获得补贴 ¥600','清华110周年校庆捐款，支付 ¥1,000','在SRT项目中表现优异，收取 ¥1,500',
+  '深夜在紫操跑步被表白，对方请你吃大餐，收取 ¥300','选课系统崩溃，重选的课要买新教材，支付 ¥400','期末在C楼通宵赶DDL，咖啡外卖费 ¥400',
 ];
 const CHEST=[
-  '获得"一二·九"奖学金，收取 ¥2,000','助教工资到账，收取 ¥1,500','获得"蒋南翔"奖学金，收取 ¥2,000',
-  '银行转账错误，多收到 ¥1,000','生日快乐！每位玩家向你支付 ¥100','获得"好读书"奖学金，收取 ¥500',
-  '科研项目经费到账，收取 ¥3,000','获得社会实践优秀奖，收取 ¥800','获得企业赞助，收取 ¥2,500','前往起点，收取 ¥1,500',
+  '获得"一二·九"奖学金，收取 ¥1,200','助教工资到账，收取 ¥900','获得"蒋南翔"奖学金，收取 ¥1,200',
+  '银行转账错误，多收到 ¥600','生日快乐！每位玩家向你支付 ¥100','获得"好读书"奖学金，收取 ¥300',
+  '科研项目经费到账，收取 ¥1,800','获得社会实践优秀奖，收取 ¥500','获得企业赞助，收取 ¥1,500','前往起点，收取 ¥1,500',
 ];
 
 const EMOJIS=['👧🏻','👦🏽','👩🏿','🧑🏼','👸🏾','🤴🏻'];
 
 // ===== SOCKET =====
-const socket = io();
-let room = null, myId = null, animating = false, chatOpen = false, unread = 0, menuOpen = false, prevTurn = -1;
-let savedRoomCode = null, savedMyName = null;
+const socket = io({
+  reconnection: true,
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+  timeout: 20000,
+  transports: ['websocket', 'polling'],
+});
+let room = null, myId = null, animating = false, chatOpen = false, unread = 0, menuOpen = false, prevTurn = -1, currentView = 'lobby';
+let savedRoomCode = sessionStorage.getItem('roomCode') || null;
+let savedMyName = sessionStorage.getItem('myName') || null;
+// 每个标签页一个随机身份令牌：刷新/重连后凭它找回自己的座位，也防止别人用同名顶号
+let playerToken = sessionStorage.getItem('playerToken');
+if (!playerToken) {
+  playerToken = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  sessionStorage.setItem('playerToken', playerToken);
+}
+
+function saveSession() {
+  if (savedRoomCode) sessionStorage.setItem('roomCode', savedRoomCode);
+  if (savedMyName) sessionStorage.setItem('myName', savedMyName);
+}
+function clearSession() {
+  savedRoomCode = null; savedMyName = null;
+  sessionStorage.removeItem('roomCode');
+  sessionStorage.removeItem('myName');
+}
 
 socket.on('connect', () => {
   myId = socket.id;
   document.getElementById('connStatus').textContent = '已连接 ✓';
-  // Auto-rejoin room after reconnection (e.g. browser tab switch on mobile)
+  document.getElementById('connStatus').style.color = '';
   if (savedRoomCode && savedMyName) {
-    socket.emit('join-room', { code: savedRoomCode, name: savedMyName });
+    socket.emit('join-room', { code: savedRoomCode, name: savedMyName, token: playerToken });
+    // 断线重连后重建语音（socket.id 可能已变化，先清掉旧连接再重新加入）
+    if (voiceOn) {
+      for (const id of [...voicePeers.keys()]) closePeer(id);
+      socket.emit('voice-join');
+    }
   }
 });
-socket.on('disconnect', () => { document.getElementById('connStatus').textContent = '连接断开，重连中...'; });
+socket.on('disconnect', () => {
+  const cs = document.getElementById('connStatus');
+  cs.textContent = '连接断开，重连中...';
+  cs.style.color = '#e74c3c';
+});
+socket.io.on('reconnect_attempt', (n) => {
+  document.getElementById('connStatus').textContent = `重连中... (第${n}次)`;
+});
+socket.io.on('reconnect', () => {
+  document.getElementById('connStatus').textContent = '已重连 ✓';
+  document.getElementById('connStatus').style.color = '#27ae60';
+});
 socket.on('error-msg', m => alert(m));
-socket.on('room-update', d => { room = d; if (d && d.code) savedRoomCode = d.code; if (!animating) refresh(); });
+socket.on('room-update', d => { room = d; if (d && d.code) { savedRoomCode = d.code; saveSession(); } reconcileVoice(); if (!animating) refresh(); });
 socket.on('dice-rolled', ({ dice, playerIndex, from, to }) => diceAnim(dice, playerIndex, from, to));
 let _droppedPending = false;
-socket.on('player-dropped', ({ name, reason }) => {
+let _droppedQueue = [];
+function showDroppedModal(name, reason) {
   _droppedPending = true;
-  showModal(`<div style="text-align:center"><div style="font-size:48px;margin-bottom:8px">💀</div><h3>${name} 破产退学了！</h3><p style="margin:12px 0;font-size:15px;color:#e74c3c;font-weight:700">资不抵债，宣告破产</p><p style="margin:8px 0;font-size:14px;color:#666">原因：「${reason}」</p><div class="modal-btns"><button class="mo" onclick="_droppedPending=false;hideModal();if(room)refresh()">确定</button></div></div>`, true);
+  showModal(`<div style="text-align:center"><div style="font-size:48px;margin-bottom:8px">💀</div><h3>${name} 破产退学了！</h3><p style="margin:12px 0;font-size:15px;color:#e74c3c;font-weight:700">资不抵债，宣告破产</p><p style="margin:8px 0;font-size:14px;color:#666">原因：「${reason}」</p><div class="modal-btns"><button class="mo" onclick="_droppedPending=false;hideModal();flushDroppedQueue();if(room)refresh()">确定</button></div></div>`, true);
+}
+function flushDroppedQueue() {
+  if (_droppedQueue.length > 0) {
+    const { name, reason } = _droppedQueue.shift();
+    showDroppedModal(name, reason);
+  }
+}
+socket.on('player-dropped', ({ name, reason }) => {
+  if (animating) {
+    _droppedQueue.push({ name, reason });
+  } else {
+    showDroppedModal(name, reason);
+  }
+});
+socket.on('jail-roll-failed', ({ dice, playerIndex, jailTurns }) => {
+  const p = room?.players[playerIndex];
+  if (!p) return;
+  const [d1,d2] = dice;
+  const df=['','⚀','⚁','⚂','⚃','⚄','⚅'];
+  if (p.id === myId) {
+    showModal(`<div style="text-align:center"><div style="font-size:48px;margin-bottom:8px">📝</div><h3>补考失败</h3><div style="display:flex;justify-content:center;gap:12px;margin:12px 0"><div style="font-size:32px;border:2px solid #333;border-radius:8px;padding:8px 12px">${df[d1]}</div><div style="font-size:32px;border:2px solid #333;border-radius:8px;padding:8px 12px">${df[d2]}</div></div><p style="margin:8px 0;color:#e74c3c">${d1}+${d2}=${d1+d2}，不是双数</p><p style="font-size:12px;color:#888">继续补考中...（第${jailTurns}/3次）</p><div class="modal-btns"><button class="mo" onclick="hideModal()">确定</button></div></div>`, true);
+  }
 });
 socket.on('chat-msg', ({ from, text, color }) => {
   addBubble(from, text, color);
@@ -464,20 +539,22 @@ function refresh() {
 function show(v) {
   ['lobby','room','game'].forEach(n => document.getElementById('view-'+n).style.display = n===v ? '' : 'none');
   if (v==='game') document.getElementById('chatToggle').style.display = 'flex';
+  currentView = v;
+  updateVoiceUI();
 }
 
 // ===== LOBBY =====
 function createRoom() {
   const n = document.getElementById('inp-cname').value.trim(); if(!n) return;
-  savedMyName = n;
-  socket.emit('create-room', { name: n });
+  savedMyName = n; saveSession();
+  socket.emit('create-room', { name: n, token: playerToken });
 }
 function joinRoom() {
   const c = document.getElementById('inp-jcode').value.trim();
   const n = document.getElementById('inp-jname').value.trim();
   if(!c||!n) return;
-  savedMyName = n;
-  socket.emit('join-room', { code: c, name: n });
+  savedMyName = n; saveSession();
+  socket.emit('join-room', { code: c, name: n, token: playerToken });
 }
 document.getElementById('inp-cname').onkeydown = e => { if(e.key==='Enter') createRoom(); };
 document.getElementById('inp-jcode').onkeydown = e => { if(e.key==='Enter') document.getElementById('inp-jname').focus(); };
@@ -492,14 +569,40 @@ function renderRoom() {
   const me = active.find(p=>p.id===myId);
   list.innerHTML = active.map(p=>{
     const r = ROLES[p.role]||ROLES.freshman;
-    return `<div class="pl-item"><div class="pl-dot" style="background:${p.color}"></div><span class="pl-name">${r.emoji} ${p.name}</span>${p.id===room.hostId?'<span class="pl-badge">房主</span>':''}<span style="font-size:10px;color:#888;margin-left:auto">${r.name}</span></div>`;
+    const readyBadge = p.ready ? '<span class="pl-badge" style="background:#d4edda;color:#27ae60">✓ 已准备</span>' : '<span class="pl-badge" style="background:#f8d7da;color:#dc3545">未准备</span>';
+    const voiceIcon = (room.voice||[]).includes(p.id) ? ' <span title="在语音中">🎤</span>' : '';
+    return `<div class="pl-item"><div class="pl-dot" style="background:${p.color}"></div><span class="pl-name">${r.emoji} ${p.name}${voiceIcon}</span>${readyBadge}<span style="font-size:10px;color:#888;margin-left:auto">${r.name}</span></div>`;
   }).join('');
   if (active.length < 6) list.innerHTML += '<div class="pl-wait">等待更多玩家加入...</div>';
   // Role selection
   const myRole = me?.role || 'freshman';
   const rs = document.getElementById('roleSelect');
   rs.innerHTML = Object.entries(ROLES).map(([k,v])=>`<div class="role-card${k===myRole?' selected':''}" onclick="selectRole('${k}')"><span class="re">${v.emoji}</span><span class="rn">${v.name}</span>${v.buff?`<span class="rd" style="color:#27ae60">✦ ${v.buff}</span>`:''}${v.debuff?`<span class="rd" style="color:#e74c3c">✧ ${v.debuff}</span>`:''}</div>`).join('');
-  document.getElementById('btnStart').style.display = '';
+  // Update ready button
+  const readyBtn = document.getElementById('btnReady');
+  if (me?.ready) {
+    readyBtn.textContent = '取消准备';
+    readyBtn.style.background = '#eee';
+    readyBtn.style.color = '#888';
+  } else {
+    readyBtn.textContent = '准备';
+    readyBtn.style.background = '';
+    readyBtn.style.color = '';
+  }
+  const readyCount = active.filter(p=>p.ready).length;
+  let hint = document.getElementById('readyHint');
+  if (active.length >= 2) {
+    const hintText = `${readyCount}/${active.length} 已准备${readyCount===active.length?' · 即将开始...':' · 所有人准备后自动开始'}`;
+    if (!hint) {
+      hint = document.createElement('p');
+      hint.id = 'readyHint';
+      hint.style.cssText = 'text-align:center;font-size:12px;color:#888;margin-top:8px';
+      readyBtn.parentElement.parentElement.appendChild(hint);
+    }
+    hint.textContent = hintText;
+  } else if (hint) {
+    hint.remove();
+  }
 }
 function selectRole(role){ socket.emit('select-role',{role}); }
 function copyCode() {
@@ -507,8 +610,8 @@ function copyCode() {
     const b=document.querySelector('.code-copy'); b.textContent='已复制!'; setTimeout(()=>b.textContent='点击复制代码',1200);
   });
 }
-function emitStart() { socket.emit('start-game'); }
-function emitLeave() { socket.emit('leave-room'); room=null; savedRoomCode=null; savedMyName=null; closeMenu(); show('lobby'); }
+function toggleReady() { socket.emit('toggle-ready'); }
+function emitLeave() { stopVoice(false); socket.emit('leave-room'); room=null; clearSession(); closeMenu(); show('lobby'); }
 function confirmEndGame() {
   closeMenu();
   if (!room || !room.started || room.finished) return;
@@ -528,6 +631,7 @@ function renderGame() {
   if (room.finished) {
     bcTurn.textContent = room.winner ? `🎓 ${room.winner} 顺利毕业！` : '游戏结束！';
     rollBtn.style.display = 'none';
+    document.getElementById('bcEndTurnBtn').style.display = 'none';
     // Show settlement popup once
     if (room.settlement && !room._shownSettle && !_droppedPending) {
       room._shownSettle = true;
@@ -544,8 +648,21 @@ function renderGame() {
     }
   } else {
     bcTurn.textContent = `${emoji} ${cp.name} 的回合 · 第${room.round}回合`;
-    rollBtn.disabled = animating || mi !== room.currentTurn || room.rolled;
-    rollBtn.style.display = animating ? 'none' : '';
+    const isMyTurn = mi === room.currentTurn;
+    if (isMyTurn && cp.inJail && !room.rolled && !animating) {
+      rollBtn.style.display = 'none';
+      document.getElementById('bcEndTurnBtn').style.display = 'none';
+      if (!room._jailPrompted) {
+        room._jailPrompted = true;
+        const jailMsg = cp.jailTurns >= 2 ? '<p style="font-size:11px;color:#e74c3c">第3次机会，未掷出双数将强制交费</p>' : '';
+        showModal(`<div style="text-align:center"><div style="font-size:48px;margin-bottom:8px">📝</div><h3>挂科补考</h3><p style="margin:8px 0">你需要通过补考才能继续前进</p>${jailMsg}<div class="modal-btns"><button class="mc" onclick="hideModal();socket.emit('jail-action',{action:'pay'})">交 ¥500 补考费</button><button class="mo" onclick="hideModal();socket.emit('jail-action',{action:'roll'})">掷骰子（双数过关）</button></div></div>`, true);
+      }
+    } else {
+      room._jailPrompted = false;
+      rollBtn.disabled = animating || !isMyTurn || room.rolled;
+      rollBtn.style.display = animating ? 'none' : '';
+      document.getElementById('bcEndTurnBtn').style.display = (isMyTurn && room.rolled && !animating) ? '' : 'none';
+    }
   }
 
   // End-game vote prompt
@@ -581,7 +698,7 @@ function renderGame() {
     const roleEmoji = ROLES[p.role]?.emoji||'🎒';
     const roleName = ROLES[p.role]?.name||'新生';
     card.innerHTML = `
-      <div class="pc-top"><span class="pc-name" style="color:${p.color}"><span class="pc-emoji">${emoji}</span>${p.name}${isMe?' (我)':''} <span style="font-size:11px">${roleEmoji}</span></span><span class="pc-money${p.money<0?' negative':''}">${p.money<0?'-':''}¥${Math.abs(p.money).toLocaleString()}</span></div>
+      <div class="pc-top"><span class="pc-name" style="color:${p.color}"><span class="pc-emoji">${emoji}</span>${p.name}${isMe?' (我)':''} <span style="font-size:11px">${roleEmoji}</span>${(room.voice||[]).includes(p.id)?' <span style="font-size:11px" title="在语音中">🎤</span>':''}</span><span class="pc-money${p.money<0?' negative':''}">${p.money<0?'-':''}¥${Math.abs(p.money).toLocaleString()}</span></div>
       <div class="pc-pos">📍 ${posN}${p.bankrupt?' · 已退学':''} · ${roleName}</div>
       <div class="pc-props">${dots||'<span style="font-size:10px;color:#ccc">暂无地产</span>'}</div>`;
     area.appendChild(card);
@@ -659,10 +776,12 @@ function diceAnim(dice, pi, from, to) {
         if(pi!==undefined && from!==undefined && to!==undefined){
           stepMove(pi, from, to, ()=>{
             animating=false; refresh(); boardZoomOut();
+            flushDroppedQueue();
             if(iRolled){ if(!checkAutoBuy() && !checkEventCard() && !checkAutoUpgrade()) autoEndTurn(); }
           });
         } else {
           animating=false; refresh();
+          flushDroppedQueue();
           if(iRolled) autoEndTurn();
         }
       }, 1000);
@@ -727,6 +846,7 @@ function stepMove(pi, from, to, cb){
 
 // ===== EMITS =====
 function emitRoll(){ socket.emit('roll-dice'); }
+function emitEndTurn(){ lastBuyPromptPos=-1; socket.emit('end-turn'); }
 function autoEndTurn(){ setTimeout(()=>{ lastBuyPromptPos=-1; socket.emit('end-turn'); }, 800); }
 
 // ===== MENU =====
@@ -758,7 +878,7 @@ function checkAutoBuy(){
   const buyBtn=canAfford
     ? `<button class="mo" onclick="doBuy(${sp.id},${ci})">购买</button>`
     : `<button class="mo" disabled style="background:#ccc;cursor:default">余额不足</button>`;
-  showModal(`<h3>🏠 购买地产</h3><p style="margin:8px 0">${emoji} <b>${p.name}</b> 到达了 <b>${sp.i} ${sp.n}</b></p><p style="font-size:18px;font-weight:700;color:var(--purple);margin:8px 0">¥${realPrice.toLocaleString()}${priceNote}</p><p style="font-size:12px;color:#888">当前余额：¥${p.money.toLocaleString()}</p><div class="modal-btns"><button class="mc" onclick="skipBuy()">不买</button>${buyBtn}</div>`);
+  showModal(`<h3>🏠 购买地产</h3><p style="margin:8px 0">${emoji} <b>${p.name}</b> 到达了 <b>${sp.i} ${sp.n}</b></p><p style="font-size:18px;font-weight:700;color:var(--purple);margin:8px 0">¥${realPrice.toLocaleString()}${priceNote}</p><p style="font-size:12px;color:#888">当前余额：¥${p.money.toLocaleString()}</p><div class="modal-btns"><button class="mc" onclick="skipBuy()">不买</button>${buyBtn}</div>`, true);
   return true;
 }
 function doBuy(spaceId,pi){ socket.emit('buy-property',{spaceId:spaceId,playerIndex:pi}); hideModal(); autoEndTurn(); }
@@ -767,11 +887,11 @@ function checkEventCard(){
   if(!room||!room.started||!room.lastCard) return false;
   const card = room.lastCard;
   if(card.type==='chance'){
-    showModal(`<h3>📋 学生会通知</h3><p style="margin:12px 0;font-size:15px;line-height:1.6">${card.text}</p><div class="modal-btns"><button class="mo" onclick="hideModal();autoEndTurn()">确定</button></div>`);
+    showModal(`<h3>📋 学生会通知</h3><p style="margin:12px 0;font-size:15px;line-height:1.6">${card.text}</p><div class="modal-btns"><button class="mo" onclick="hideModal();autoEndTurn()">确定</button></div>`, true);
     return true;
   }
   if(card.type==='chest'){
-    showModal(`<h3>💰 奖学金</h3><p style="margin:12px 0;font-size:15px;line-height:1.6">${card.text}</p><div class="modal-btns"><button class="mo" onclick="hideModal();autoEndTurn()">确定</button></div>`);
+    showModal(`<h3>💰 奖学金</h3><p style="margin:12px 0;font-size:15px;line-height:1.6">${card.text}</p><div class="modal-btns"><button class="mo" onclick="hideModal();autoEndTurn()">确定</button></div>`, true);
     return true;
   }
   return false;
@@ -794,7 +914,7 @@ function checkAutoUpgrade(){
   const upgradeBtn=canAfford
     ? `<button class="mo" onclick="doUpgrade(${sp.id})">升级 ¥${cost.toLocaleString()}</button>`
     : `<button class="mo" disabled style="background:#ccc;cursor:default">余额不足</button>`;
-  showModal(`<h3>🏠 盖房子</h3><p style="margin:8px 0">${emoji} <b>${p.name}</b> 到达了自己的地产 <b>${sp.i} ${sp.n}</b></p><p style="font-size:12px;color:#888;margin:4px 0">当前：${lvl} → 等级${prop.level+1}</p><p style="font-size:18px;font-weight:700;color:#27ae60;margin:8px 0">升级费 ¥${cost.toLocaleString()}${costNote}</p><p style="font-size:12px;color:#888">当前余额：¥${p.money.toLocaleString()}</p><div class="modal-btns"><button class="mc" onclick="skipUpgrade()">不升级</button>${upgradeBtn}</div>`);
+  showModal(`<h3>🏠 盖房子</h3><p style="margin:8px 0">${emoji} <b>${p.name}</b> 到达了自己的地产 <b>${sp.i} ${sp.n}</b></p><p style="font-size:12px;color:#888;margin:4px 0">当前：${lvl} → 等级${prop.level+1}</p><p style="font-size:18px;font-weight:700;color:#27ae60;margin:8px 0">升级费 ¥${cost.toLocaleString()}${costNote}</p><p style="font-size:12px;color:#888">当前余额：¥${p.money.toLocaleString()}</p><div class="modal-btns"><button class="mc" onclick="skipUpgrade()">不升级</button>${upgradeBtn}</div>`, true);
   return true;
 }
 function doUpgrade(spaceId){ socket.emit('upgrade-property',{spaceId}); hideModal(); autoEndTurn(); }
@@ -821,6 +941,141 @@ function addBubble(from,text,color){
   d.innerHTML=`<div class="cm-name" style="color:${color||'#666'}">${from}</div><div class="cm-text">${text.replace(/</g,'&lt;')}</div>`;
   m.appendChild(d);m.scrollTop=m.scrollHeight;
 }
+
+// ===== VOICE（WebRTC 网状语音，Socket.IO 做信令） =====
+let voiceOn = false, voiceMuted = false, localStream = null, _needAudioResume = false;
+const voicePeers = new Map(); // peerId(socket.id) -> RTCPeerConnection
+const RTC_CFG = { iceServers: [
+  { urls: 'stun:stun.miwifi.com:3478' },
+  { urls: 'stun:stun.l.google.com:19302' },
+]};
+
+async function toggleVoice() {
+  if (voiceOn) { stopVoice(true); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert('当前浏览器不支持语音功能（需要 HTTPS 环境）'); return;
+  }
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
+  } catch (e) {
+    alert('无法获取麦克风权限，请在浏览器设置中允许本站使用麦克风'); return;
+  }
+  voiceOn = true; voiceMuted = false;
+  socket.emit('voice-join');
+  updateVoiceUI();
+}
+
+function stopVoice(notifyServer) {
+  if (notifyServer && voiceOn && socket.connected) socket.emit('voice-leave');
+  voiceOn = false; voiceMuted = false;
+  for (const id of [...voicePeers.keys()]) closePeer(id);
+  if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+  updateVoiceUI();
+}
+
+function toggleMute() {
+  if (!localStream) return;
+  voiceMuted = !voiceMuted;
+  localStream.getAudioTracks().forEach(t => t.enabled = !voiceMuted);
+  updateVoiceUI();
+}
+
+function closePeer(id) {
+  const pc = voicePeers.get(id);
+  if (pc) { try { pc.close(); } catch (e) {} voicePeers.delete(id); }
+  const el = document.getElementById('vaud-' + id);
+  if (el) el.remove();
+}
+
+function createPeer(peerId, initiator) {
+  closePeer(peerId);
+  const pc = new RTCPeerConnection(RTC_CFG);
+  voicePeers.set(peerId, pc);
+  pc.onicecandidate = e => { if (e.candidate) socket.emit('voice-signal', { to: peerId, data: { ice: e.candidate } }); };
+  pc.ontrack = e => {
+    let el = document.getElementById('vaud-' + peerId);
+    if (!el) {
+      el = document.createElement('audio');
+      el.id = 'vaud-' + peerId;
+      el.autoplay = true;
+      el.setAttribute('playsinline', '');
+      document.getElementById('voiceAudios').appendChild(el);
+    }
+    el.srcObject = e.streams[0];
+    el.play().catch(() => { _needAudioResume = true; });
+  };
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === 'failed') closePeer(peerId);
+  };
+  if (initiator) {
+    pc.onnegotiationneeded = async () => {
+      try {
+        await pc.setLocalDescription(await pc.createOffer());
+        socket.emit('voice-signal', { to: peerId, data: { sdp: pc.localDescription } });
+      } catch (e) {}
+    };
+  }
+  if (localStream) localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  return pc;
+}
+
+// 我加入语音后，服务器告知已有成员，由我向每个人发起连接
+socket.on('voice-members', ({ ids }) => {
+  if (!voiceOn) return;
+  (ids || []).forEach(id => createPeer(id, true));
+});
+
+socket.on('voice-signal', async ({ from, data }) => {
+  if (!voiceOn || !from || !data) return;
+  let pc = voicePeers.get(from);
+  try {
+    if (data.sdp) {
+      if (data.sdp.type === 'offer') {
+        if (!pc) pc = createPeer(from, false);
+        await pc.setRemoteDescription(data.sdp);
+        await pc.setLocalDescription(await pc.createAnswer());
+        socket.emit('voice-signal', { to: from, data: { sdp: pc.localDescription } });
+      } else if (data.sdp.type === 'answer' && pc) {
+        await pc.setRemoteDescription(data.sdp);
+      }
+    } else if (data.ice && pc) {
+      await pc.addIceCandidate(data.ice).catch(() => {});
+    }
+  } catch (e) { console.warn('voice-signal 处理失败', e); }
+});
+
+socket.on('voice-peer-left', ({ id }) => closePeer(id));
+
+// 收到房间状态后，把已不在语音列表里的连接关掉
+function reconcileVoice() {
+  if (!room || !Array.isArray(room.voice)) return;
+  for (const id of [...voicePeers.keys()]) {
+    if (!room.voice.includes(id)) closePeer(id);
+  }
+}
+
+function updateVoiceUI() {
+  const vt = document.getElementById('voiceToggle');
+  const mt = document.getElementById('muteToggle');
+  if (!vt || !mt) return;
+  const inRoom = currentView === 'room' || currentView === 'game';
+  vt.style.display = inRoom ? 'flex' : 'none';
+  vt.classList.toggle('on', voiceOn);
+  vt.title = voiceOn ? '退出语音' : '加入语音';
+  mt.style.display = inRoom && voiceOn ? 'flex' : 'none';
+  mt.classList.toggle('muted', voiceMuted);
+  mt.textContent = voiceMuted ? '🔇' : '🔊';
+}
+
+// 移动端自动播放被拦截时，下次点击屏幕时恢复播放
+document.addEventListener('click', () => {
+  if (_needAudioResume) {
+    _needAudioResume = false;
+    document.querySelectorAll('#voiceAudios audio').forEach(a => a.play().catch(() => {}));
+  }
+}, true);
 
 // ===== OVERLAYS =====
 function openOverlay(name){document.getElementById('ov-'+name).classList.add('show');closeMenu();}
@@ -868,14 +1123,14 @@ function side(id){if([0,10,20,30].includes(id))return'corner';if(id<10)return'bo
   });
   S.filter(s=>s.t==='railroad').forEach(sp=>{
     dg.innerHTML+=`<div class="deed-card"><div class="dc-color" style="background:#555"></div><div class="dc-name">${sp.i} ${sp.n}</div><div class="dc-sub">校门</div><hr>
-    <div class="dc-row"><span>购买</span><b>¥2,000</b></div><hr>
-    <div class="dc-row"><span>1个</span><span>¥250</span></div><div class="dc-row"><span>2个</span><span>¥500</span></div>
-    <div class="dc-row"><span>3个</span><span>¥1,000</span></div><div class="dc-row"><span>4个</span><span>¥2,000</span></div></div>`;
+    <div class="dc-row"><span>购买</span><b>¥${sp.p.toLocaleString()}</b></div><hr>
+    <div class="dc-row"><span>1个</span><span>¥500</span></div><div class="dc-row"><span>2个</span><span>¥1,000</span></div>
+    <div class="dc-row"><span>3个</span><span>¥2,000</span></div><div class="dc-row"><span>4个</span><span>¥4,000</span></div></div>`;
   });
   S.filter(s=>s.t==='utility').forEach(sp=>{
-    dg.innerHTML+=`<div class="deed-card"><div class="dc-color" style="background:#888"></div><div class="dc-name">${sp.i} ${sp.n}</div><div class="dc-sub">公用设施</div><hr>
-    <div class="dc-row"><span>购买</span><b>¥1,500</b></div><hr>
-    <div class="dc-row"><span>1个</span><span>骰子×4</span></div><div class="dc-row"><span>2个</span><span>骰子×10</span></div></div>`;
+    dg.innerHTML+=`<div class="deed-card"><div class="dc-color" style="background:#888"></div><div class="dc-name">${sp.i} ${sp.n}</div><div class="dc-sub">公用设施（租金=骰子点数×倍率）</div><hr>
+    <div class="dc-row"><span>购买</span><b>¥${sp.p.toLocaleString()}</b></div><hr>
+    <div class="dc-row"><span>1个</span><span>骰子×8</span></div><div class="dc-row"><span>2个</span><span>骰子×20</span></div></div>`;
   });
   CHANCE.forEach(t=>{document.getElementById('chanceGrid').innerHTML+=`<div class="event-card chance"><div class="ev-title">📋 学生会通知</div>${t}</div>`;});
   CHEST.forEach(t=>{document.getElementById('chestGrid').innerHTML+=`<div class="event-card chest"><div class="ev-title">💰 奖学金</div>${t}</div>`;});
