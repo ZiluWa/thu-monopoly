@@ -49,6 +49,18 @@
     .role-card .re{font-size:24px;display:block}
     .role-card .rn{font-size:11px;font-weight:600;display:block;margin-top:2px}
     .role-card .rd{font-size:9px;color:#888;display:block;margin-top:2px;line-height:1.3}
+    .settings-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:10px 0 4px;position:relative}
+    .settings-summary{font-size:12px;color:#888;flex:1;text-align:left;line-height:1.4}
+    .settings-btn{background:#fff;border:1px solid var(--purple);color:var(--purple);border-radius:10px;padding:8px 12px;font-size:13px;font-weight:600;white-space:nowrap}
+    .guide-bubble{position:absolute;right:0;bottom:calc(100% + 12px);background:var(--purple);color:#fff;padding:10px 12px;border-radius:10px;font-size:13px;line-height:1.4;box-shadow:0 6px 18px rgba(0,0,0,.25);text-align:left;max-width:230px;animation:guideBob 1.2s ease-in-out infinite;z-index:5}
+    .guide-bubble:after{content:'';position:absolute;right:26px;top:100%;border:8px solid transparent;border-top-color:var(--purple)}
+    .guide-close{display:inline-block;margin-top:6px;background:rgba(255,255,255,.22);border:none;color:#fff;font-size:12px;padding:4px 10px;border-radius:6px}
+    @keyframes guideBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+    .set-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #f0f0f0}
+    .set-label{font-size:14px;font-weight:600}.set-desc{font-size:12px;color:#888;margin-top:2px}
+    .set-toggle{min-width:56px;padding:8px 12px;border-radius:20px;border:1px solid #ccc;background:#eee;color:#666;font-size:13px;font-weight:600}
+    .set-toggle.on{background:var(--purple);border-color:var(--purple);color:#fff}
+    .set-toggle:disabled{opacity:.6}
     .room-btns{display:flex;gap:8px}
     .room-btns button{flex:1;padding:14px;border:none;border-radius:10px;font-size:14px;font-weight:600}
     .btn-go{background:var(--purple);color:#fff}
@@ -262,6 +274,11 @@
       <h4>玩家 <span id="plCount">0</span>/6 <span style="font-size:13px;font-weight:normal;color:#888">· 2~6 名即可开始</span></h4>
       <div id="roomPlayers"></div>
     </div>
+    <div class="settings-bar" id="settingsBar">
+      <span class="settings-summary" id="settingsSummary"></span>
+      <button class="settings-btn" id="settingsBtn" onclick="openSettings()">⚙️ 设置</button>
+      <div class="guide-bubble" id="settingsGuide" style="display:none">新功能：点这里自定义玩法<br><span style="font-size:11px;opacity:.85">卖地产、起点奖励都可以开关</span><br><button class="guide-close" onclick="dismissSettingsGuide()">知道了</button></div>
+    </div>
     <div class="room-btns">
       <button class="btn-go" id="btnReady" onclick="toggleReady()">准备</button>
       <button class="btn-out" onclick="emitLeave()">离开</button>
@@ -285,6 +302,8 @@
     <button class="menu-btn" onclick="toggleMenu()">☰</button>
   </div>
   <div class="dropdown" id="dropMenu" style="display:none">
+    <button onclick="openSettings()">⚙️ 玩法设置</button>
+    <button onclick="showSellModal()">🏷️ 卖出地产</button>
     <button onclick="openOverlay('cards')">🃏 地产卡 / 事件卡</button>
     <button onclick="openOverlay('rules')">📖 游戏规则</button>
     <button onclick="printBoard()">🖨️ 打印棋盘</button>
@@ -305,6 +324,8 @@
         <div class="bc-turn" id="bcTurn"></div>
         <button class="btn-roll" id="bcRollBtn" onclick="emitRoll()">掷骰子 🎲</button>
         <button class="btn-roll" id="bcEndTurnBtn" onclick="emitEndTurn()" style="display:none;background:#27ae60">结束回合 ➜</button>
+        <button class="btn-roll" id="bcSellBtn" onclick="showSellModal()" style="display:none;background:#e67e22">卖地产还债 🏷️</button>
+        <button class="btn-roll" id="bcSettleBtn" onclick="showSettlement()" style="display:none;background:#8e44ad">📊 查看结算</button>
         <div class="move-info" id="moveInfo" style="display:none"></div>
       </div>
     </div>
@@ -353,14 +374,27 @@
     <div class="event-grid" id="chestGrid"></div>
   </div>
 </div>
+<div class="overlay" id="ov-settings">
+  <div class="ov-bar"><h3>⚙️ 玩法设置</h3><button onclick="closeOverlay('settings')">✕</button></div>
+  <div class="ov-body rules-body">
+    <p id="settingsHint" style="font-size:12px;color:#888;margin-bottom:8px"></p>
+    <div id="settingsList"></div>
+    <h3 style="margin-top:18px">说明</h3>
+    <ul>
+      <li><b>可以卖地产还债</b>：开启时，资金为负先进入“欠款”状态，可按地价 50%＋建筑 50% 卖出地产还债，卖光仍还不清才退学；关闭时资金一到 0 就直接退学。</li>
+      <li><b>经过起点 +¥1,500</b>：开启时只要经过起点就发钱；关闭时只有正好停在起点才发钱。</li>
+      <li>设置在开局前由房间里任何人修改，会通知所有玩家；开局后只能查看。你的选择会保存在本机，下次建房自动沿用。</li>
+    </ul>
+  </div>
+</div>
 <div class="overlay" id="ov-rules">
   <div class="ov-bar"><h3>游戏规则</h3><button onclick="closeOverlay('rules')">✕</button></div>
   <div class="ov-body rules-body">
     <h3>游戏简介</h3><p>清华大富翁是以清华大学为主题的桌游，2~6名玩家在清华校园中购买地产、收取租金，成为最后的"清华首富"！</p>
     <h3>游戏准备</h3><ul><li>打印棋盘（建议A3彩色）</li><li>准备骰子两颗（或用在线掷骰子）</li><li>准备棋子（硬币、橡皮等均可）</li><li>每人起始资金 ¥10,000</li></ul>
-    <h3>基本规则</h3><ul><li><b>掷骰子前进</b>：每回合掷两颗骰子，按点数前进</li><li><b>经过/到达起点</b>：收取 ¥1,500</li><li><b>购买地产</b>：到达无主地产可按标价购买</li><li><b>收取租金</b>：到达他人地产需支付租金</li><li><b>升级地产</b>：落到自己的地产可花钱升级，租金大幅提升</li><li><b>同色加成</b>：集齐同色所有地产，租金翻倍</li><li><b>校门</b>：1个¥500 / 2个¥1,000 / 3个¥2,000 / 4个¥4,000</li><li><b>校园网/校园卡</b>：租金=骰子点数×8（1个）或×20（2个），不可升级</li></ul>
+    <h3>基本规则</h3><ul><li><b>掷骰子前进</b>：每回合掷两颗骰子，按点数前进</li><li><b>经过起点</b>：收取 ¥1,500（可在“设置”里改为只有正好停在起点才收）</li><li><b>购买地产</b>：到达无主地产可按标价购买</li><li><b>收取租金</b>：到达他人地产需支付租金</li><li><b>升级地产</b>：落到自己的地产可花钱升级，租金大幅提升</li><li><b>卖出地产</b>：随时可按地价 50%＋建筑 50% 卖回；资金为负时先进入欠款状态，必须卖地产还债，卖光仍还不清才退学（可在“设置”里关闭）</li><li><b>同色加成</b>：集齐同色所有地产，租金翻倍</li><li><b>校门</b>：1个¥500 / 2个¥1,000 / 3个¥2,000 / 4个¥4,000</li><li><b>校园网/校园卡</b>：租金=骰子点数×40（1个）或×100（2个），不可升级</li></ul>
     <h3>特殊格子</h3><ul><li><b>学生会通知/奖学金</b>：抽卡执行</li><li><b>缴学费</b>：-¥2,000 / <b>交书本费</b>：-¥1,000</li><li><b>挂科补考（监狱）</b>：每回合选择交¥500补考费直接出狱，或掷骰子（双数出狱，非双数继续补考）；连续3回合未掷出双数则强制交¥500</li><li><b>被辅导员约谈</b>：直接进入补考</li><li><b>情人坡</b>：安全休息，不产生任何费用</li></ul>
-    <h3>校园网/校园卡</h3><ul><li>其他玩家踩到你的校园网/校园卡时，按骰子点数×倍率支付租金</li><li>拥有1个：租金 = 骰子点数 × 8</li><li>拥有2个：租金 = 骰子点数 × 20</li><li>不可升级</li></ul>
+    <h3>校园网/校园卡</h3><ul><li>其他玩家踩到你的校园网/校园卡时，按骰子点数×倍率支付租金</li><li>拥有1个：租金 = 骰子点数 × 40</li><li>拥有2个：租金 = 骰子点数 × 100</li><li>不可升级</li></ul>
     <h3>胜利条件</h3><p>最后一名未退学的玩家顺利毕业获胜，或约定时间后资产最多者获胜。</p>
   </div>
 </div>
@@ -420,22 +454,26 @@ const ROLES={
   freshman:      {name:'新生',   emoji:'🎒',buff:'无特殊效果',debuff:''},
   athlete:       {name:'体育生', emoji:'🏃',buff:'每次掷骰多走2步',debuff:'踩到食堂(棕/蓝)付双倍租金'},
   competitor:    {name:'竞赛生', emoji:'🏆',buff:'盖房子费用减半',debuff:'起始资金少¥2000(¥8000)'},
-  alumni:        {name:'校友',   emoji:'🎓',buff:'经过起点拿¥3000(别人拿¥2000)',debuff:'买地产贵25%'},
+  alumni:        {name:'校友',   emoji:'🎓',buff:'起点奖励 ¥2,000(别人 ¥1,500)',debuff:'买地产贵25%'},
   international: {name:'国际生', emoji:'🌍',buff:'起始资金多¥3000(¥13000)',debuff:'踩到别人地产多付30%租金'},
   talent:        {name:'特长生', emoji:'🎨',buff:'拥有的文化场馆(黄)收双倍租金',debuff:'踩到运动场(橙)付双倍租金'},
   faculty:       {name:'教职工', emoji:'👔',buff:'买地产打7折',debuff:'每次掷骰少走1步'},
 };
 const CHANCE=[
   '获得"国家奖学金"！收取 ¥5,000','在"挑战杯"中获奖，收取 ¥2,000','自行车被偷了，支付 ¥700 买新车',
-  '论文发表在 Nature 上！收取 ¥3,000','被选为学生会主席，每位玩家向你支付 ¥300','食堂饭卡充值故障，支付 ¥300',
+  '论文发表在 Nature 上！收取 ¥3,000','被选为学生会主席，请全体同学喝奶茶，向每位玩家支付 ¥300','食堂饭卡充值故障，支付 ¥300',
   '获得出国交换机会，前进到起点收取 ¥1,500','宿舍违规用电被抓，支付 ¥700','获得创业大赛奖金，收取 ¥2,500','期末复习太累进了校医院，支付 ¥500',
   '被选中参加军训方阵表演，获得补贴 ¥600','清华110周年校庆捐款，支付 ¥1,000','在SRT项目中表现优异，收取 ¥1,500',
   '深夜在紫操跑步被表白，对方请你吃大餐，收取 ¥300','选课系统崩溃，重选的课要买新教材，支付 ¥400','期末在C楼通宵赶DDL，咖啡外卖费 ¥400',
+  '校庆志愿者被抓壮丁，前往「大礼堂」（无主可买，有主付租）','自行车没气了，退后 3 格','期中考试周到了，直接进入补考',
+  '宿舍查寝违规，每处地产交 ¥200 整改费，每级建筑再加 ¥100','拿到大厂实习 offer，收取 ¥2,000','校园卡丢了，补办支付 ¥200',
+  '抢到了陈明游泳馆的课，前往「综合体育馆」','被拉去学生节当演员，每位玩家给你 ¥200 打赏','校车坐过站，前往最近的校门；若有主，付双倍租金','登上清华官微，收取 ¥1,000',
 ];
 const CHEST=[
   '获得"一二·九"奖学金，收取 ¥1,200','助教工资到账，收取 ¥900','获得"蒋南翔"奖学金，收取 ¥1,200',
   '银行转账错误，多收到 ¥600','生日快乐！每位玩家向你支付 ¥100','获得"好读书"奖学金，收取 ¥300',
   '科研项目经费到账，收取 ¥1,800','获得社会实践优秀奖，收取 ¥500','获得企业赞助，收取 ¥1,500','前往起点，收取 ¥1,500',
+  '获得"综合优秀奖学金"，收取 ¥2,000','获得"国家励志奖学金"，收取 ¥2,500','课程助教补贴到账，收取 ¥700','校医院报销到账，收取 ¥400','校友捐赠基金分红，每位玩家向你支付 ¥150','奖学金重复申报被追回，支付 ¥500',
 ];
 
 const EMOJIS=['👧🏻','👦🏽','👩🏿','🧑🏼','👸🏾','🤴🏻'];
@@ -495,9 +533,11 @@ socket.io.on('reconnect', () => {
   document.getElementById('connStatus').style.color = '#27ae60';
 });
 socket.on('error-msg', m => alert(m));
+socket.on('need-sell', () => { showSellModal(); });
 socket.on('room-update', d => { room = d; if (d && d.code) { savedRoomCode = d.code; saveSession(); } reconcileVoice(); if (!animating) refresh(); });
-socket.on('dice-rolled', ({ dice, playerIndex, from, to }) => diceAnim(dice, playerIndex, from, to));
+socket.on('dice-rolled', ({ dice, playerIndex, from, to, landed }) => diceAnim(dice, playerIndex, from, to, landed));
 let _droppedPending = false;
+let _reopenSell = false;
 let _droppedQueue = [];
 function showDroppedModal(name, reason) {
   _droppedPending = true;
@@ -516,13 +556,16 @@ socket.on('player-dropped', ({ name, reason }) => {
     showDroppedModal(name, reason);
   }
 });
-socket.on('jail-roll-failed', ({ dice, playerIndex, jailTurns }) => {
+socket.on('jail-roll-failed', ({ dice, playerIndex, jailTurns, forced }) => {
   const p = room?.players[playerIndex];
   if (!p) return;
   const [d1,d2] = dice;
   const df=['','⚀','⚁','⚂','⚃','⚄','⚅'];
   if (p.id === myId) {
-    showModal(`<div style="text-align:center"><div style="font-size:48px;margin-bottom:8px">📝</div><h3>补考失败</h3><div style="display:flex;justify-content:center;gap:12px;margin:12px 0"><div style="font-size:32px;border:2px solid #333;border-radius:8px;padding:8px 12px">${df[d1]}</div><div style="font-size:32px;border:2px solid #333;border-radius:8px;padding:8px 12px">${df[d2]}</div></div><p style="margin:8px 0;color:#e74c3c">${d1}+${d2}=${d1+d2}，不是双数</p><p style="font-size:12px;color:#888">继续补考中...（第${jailTurns}/3次）</p><div class="modal-btns"><button class="mo" onclick="hideModal()">确定</button></div></div>`, true);
+    const status = forced
+      ? '<p style="font-size:12px;color:#888">第三次未掷出双数，已强制交 ¥500 补考费，通过补考，下回合正常行动</p>'
+      : `<p style="font-size:12px;color:#888">继续补考中...（第${jailTurns}/3次）</p>`;
+    showModal(`<div style="text-align:center"><div style="font-size:48px;margin-bottom:8px">📝</div><h3>补考失败</h3><div style="display:flex;justify-content:center;gap:12px;margin:12px 0"><div style="font-size:32px;border:2px solid #333;border-radius:8px;padding:8px 12px">${df[d1]}</div><div style="font-size:32px;border:2px solid #333;border-radius:8px;padding:8px 12px">${df[d2]}</div></div><p style="margin:8px 0;color:#e74c3c">${d1}+${d2}=${d1+d2}，不是双数</p>${status}<div class="modal-btns"><button class="mo" onclick="hideModal()">确定</button></div></div>`, true);
   }
 });
 socket.on('chat-msg', ({ from, text, color }) => {
@@ -533,12 +576,14 @@ socket.on('chat-msg', ({ from, text, color }) => {
 // ===== VIEWS =====
 function refresh() {
   if (!room) { show('lobby'); return; }
+  renderSettings();
   if (!room.started) { show('room'); renderRoom(); return; }
   show('game'); renderGame();
 }
 function show(v) {
   ['lobby','room','game'].forEach(n => document.getElementById('view-'+n).style.display = n===v ? '' : 'none');
   if (v==='game') document.getElementById('chatToggle').style.display = 'flex';
+  if (v==='game') markSettingsGuideDone();
   currentView = v;
   updateVoiceUI();
 }
@@ -547,7 +592,7 @@ function show(v) {
 function createRoom() {
   const n = document.getElementById('inp-cname').value.trim(); if(!n) return;
   savedMyName = n; saveSession();
-  socket.emit('create-room', { name: n, token: playerToken });
+  socket.emit('create-room', { name: n, token: playerToken, settings: loadPrefSettings() });
 }
 function joinRoom() {
   const c = document.getElementById('inp-jcode').value.trim();
@@ -565,6 +610,7 @@ function renderRoom() {
   document.getElementById('codeChars').innerHTML = room.code.split('').map(c=>`<div class="code-char">${c}</div>`).join('');
   const active = room.players.filter(p => !p.disconnected);
   document.getElementById('plCount').textContent = active.length;
+  { const sm = document.getElementById('settingsSummary'); if (sm) { const st = room.settings || {}; sm.textContent = '玩法：' + Object.entries(SETTING_DEFS).map(([k, d]) => d.short + (st[k] === false ? '关' : '开')).join(' · '); } updateSettingsGuide(); }
   const list = document.getElementById('roomPlayers');
   const me = active.find(p=>p.id===myId);
   list.innerHTML = active.map(p=>{
@@ -635,16 +681,7 @@ function renderGame() {
     // Show settlement popup once
     if (room.settlement && !room._shownSettle && !_droppedPending) {
       room._shownSettle = true;
-      const rows = room.settlement.filter(r=>!r.bankrupt).sort((a,b)=>b.total-a.total).map((r,i)=>{
-        const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}.`;
-        const propList = (r.props||[]).map(p=>`${p.name}${p.level>0?' Lv'+p.level:''}`).join('、') || '无地产';
-        return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f5f5f5;font-size:13px"><span>${medal} <b>${r.name}</b></span><span style="color:#27ae60;font-weight:700">¥${r.total.toLocaleString()}</span></div><div style="font-size:11px;color:#888;padding:0 0 2px 24px">现金 ¥${r.money.toLocaleString()} + 地产 ¥${r.propValue.toLocaleString()}</div><div style="font-size:11px;color:#aaa;padding:0 0 6px 24px">${propList}</div>`;
-      }).join('');
-      const bankrupt = room.settlement.filter(r=>r.bankrupt).map(r=>{
-        const propList = (r.props||[]).map(p=>`${p.name}${p.level>0?' Lv'+p.level:''}`).join('、') || '无地产';
-        return `<div style="padding:6px 0;border-bottom:1px solid #f5f5f5;font-size:13px"><span style="color:#999">💀 <b>${r.name}</b>（已退学）</span></div><div style="font-size:11px;color:#aaa;padding:0 0 6px 24px">曾拥有: ${propList}</div>`;
-      }).join('');
-      showModal(`<h3>📊 游戏结算</h3><div style="margin:10px 0">${rows}</div>${bankrupt?'<div style="margin-top:8px">'+bankrupt+'</div>':''}<div class="modal-btns"><button class="mo" onclick="hideModal()">确定</button></div>`);
+      showSettlement();
     }
   } else {
     bcTurn.textContent = `${emoji} ${cp.name} 的回合 · 第${room.round}回合`;
@@ -663,6 +700,18 @@ function renderGame() {
       rollBtn.style.display = animating ? 'none' : '';
       document.getElementById('bcEndTurnBtn').style.display = (isMyTurn && room.rolled && !animating) ? '' : 'none';
     }
+  }
+
+  // 欠款：显示“卖地产还债”按钮；结束：显示“查看结算”
+  {
+    const meP = mi >= 0 ? room.players[mi] : null;
+    const sellBtn = document.getElementById('bcSellBtn'), settleBtn = document.getElementById('bcSettleBtn');
+    if (meP && meP.inDebt && !meP.bankrupt && !room.finished && !animating) {
+      sellBtn.style.display = '';
+      if (mi === room.currentTurn) bcTurn.textContent = '⚠️ 你的资金为负，请先卖地产还债';
+    } else sellBtn.style.display = 'none';
+    settleBtn.style.display = (room.finished && room.settlement) ? '' : 'none';
+    if (_reopenSell) { _reopenSell = false; if (meP && meP.inDebt) showSellModal(); }
   }
 
   // End-game vote prompt
@@ -692,6 +741,7 @@ function renderGame() {
     const owned = Object.entries(room.properties).filter(([_,v])=>v.owner===i).map(([sid])=>S[+sid]);
     const dots = owned.map(sp=>{const c=sp.g?GC[sp.g]:'#888';return `<span class="pc-dot" style="background:${c}">${sp.n}</span>`;}).join('');
     const posN = S[p.position]?.n || '起点';
+    const formerDots = p.bankrupt ? (p.lastPropertyDetails||[]).map(d=>`<span class="pc-dot" style="background:#bbb">${d.name}${d.level>0?' Lv'+d.level:''}</span>`).join('') : '';
     const card = document.createElement('div');
     card.className = `player-card${isMe?' is-me':''}${isTurn?' on-turn':''}`;
     card.style.borderLeftColor = p.color;
@@ -699,8 +749,8 @@ function renderGame() {
     const roleName = ROLES[p.role]?.name||'新生';
     card.innerHTML = `
       <div class="pc-top"><span class="pc-name" style="color:${p.color}"><span class="pc-emoji">${emoji}</span>${p.name}${isMe?' (我)':''} <span style="font-size:11px">${roleEmoji}</span>${(room.voice||[]).includes(p.id)?' <span style="font-size:11px" title="在语音中">🎤</span>':''}</span><span class="pc-money${p.money<0?' negative':''}">${p.money<0?'-':''}¥${Math.abs(p.money).toLocaleString()}</span></div>
-      <div class="pc-pos">📍 ${posN}${p.bankrupt?' · 已退学':''} · ${roleName}</div>
-      <div class="pc-props">${dots||'<span style="font-size:10px;color:#ccc">暂无地产</span>'}</div>`;
+      <div class="pc-pos">📍 ${posN}${p.bankrupt?' · 已退学':(p.inDebt?' · ⚠️ 欠款中':'')} · ${roleName}</div>
+      <div class="pc-props">${p.bankrupt ? (formerDots ? `<span style="font-size:10px;color:#999">曾拥有（¥${(p.lastPropertyValue||0).toLocaleString()}）：</span>${formerDots}` : '<span style="font-size:10px;color:#ccc">曾无地产</span>') : (dots||'<span style="font-size:10px;color:#ccc">暂无地产</span>')}</div>`;
     area.appendChild(card);
   });
 
@@ -747,7 +797,7 @@ function updateProperties(){
 }
 
 // ===== DICE =====
-function diceAnim(dice, pi, from, to) {
+function diceAnim(dice, pi, from, to, landed) {
   animating=true;
   const bc=document.getElementById('boardCenter');
   const rollBtn=document.getElementById('bcRollBtn');
@@ -774,10 +824,15 @@ function diceAnim(dice, pi, from, to) {
         popup.remove();
         const iRolled = room.players[pi]?.id === myId;
         if(pi!==undefined && from!==undefined && to!==undefined){
-          stepMove(pi, from, to, ()=>{
-            animating=false; refresh(); boardZoomOut();
-            flushDroppedQueue();
-            if(iRolled){ if(!checkAutoBuy() && !checkEventCard() && !checkAutoUpgrade()) autoEndTurn(); }
+          // 先走到骰子落点；若被卡牌/约谈移走，停顿一下再跳到最终位置
+          const walkTo = (landed!==undefined && landed!==null) ? landed : to;
+          stepMove(pi, from, walkTo, ()=>{
+            const done=()=>{
+              animating=false; refresh(); boardZoomOut();
+              flushDroppedQueue();
+              if(iRolled){ if(!checkEventCard() && !checkAutoBuy() && !checkAutoUpgrade()) autoEndTurn(); }
+            };
+            if(walkTo!==to) setTimeout(done, 650); else done();
           });
         } else {
           animating=false; refresh();
@@ -887,15 +942,17 @@ function checkEventCard(){
   if(!room||!room.started||!room.lastCard) return false;
   const card = room.lastCard;
   if(card.type==='chance'){
-    showModal(`<h3>📋 学生会通知</h3><p style="margin:12px 0;font-size:15px;line-height:1.6">${card.text}</p><div class="modal-btns"><button class="mo" onclick="hideModal();autoEndTurn()">确定</button></div>`, true);
+    showModal(`<h3>📋 学生会通知</h3><p style="margin:12px 0;font-size:15px;line-height:1.6">${card.text}</p><div class="modal-btns"><button class="mo" onclick="hideModal();afterCard()">确定</button></div>`, true);
     return true;
   }
   if(card.type==='chest'){
-    showModal(`<h3>💰 奖学金</h3><p style="margin:12px 0;font-size:15px;line-height:1.6">${card.text}</p><div class="modal-btns"><button class="mo" onclick="hideModal();autoEndTurn()">确定</button></div>`, true);
+    showModal(`<h3>💰 奖学金</h3><p style="margin:12px 0;font-size:15px;line-height:1.6">${card.text}</p><div class="modal-btns"><button class="mo" onclick="hideModal();afterCard()">确定</button></div>`, true);
     return true;
   }
   return false;
 }
+// 卡片看完后：若被卡牌送到了地产格，再判断买地 / 升级，否则结束回合
+function afterCard(){ if(!checkAutoBuy() && !checkAutoUpgrade()) autoEndTurn(); }
 function checkAutoUpgrade(){
   if(!room||!room.started||room.finished) return false;
   const ci=room.currentTurn;
@@ -1079,6 +1136,90 @@ document.addEventListener('click', () => {
 
 // ===== OVERLAYS =====
 function openOverlay(name){document.getElementById('ov-'+name).classList.add('show');closeMenu();}
+
+// ===== 玩法设置 =====
+const SETTING_DEFS = {
+  sellProperty: { label: '可以卖地产还债', short: '卖地产', desc: '资金为负时可按地价 50%＋建筑 50% 卖地产还债，卖光仍还不清才退学', default: true },
+  passGoMoney:  { label: '经过起点 +¥1,500', short: '经过起点给钱', desc: '关闭后只有正好停在起点才发钱', default: true },
+};
+function loadPrefSettings(){
+  const out = {}; let saved = {};
+  try { saved = JSON.parse(localStorage.getItem('monopolySettings') || '{}') || {}; } catch (e) { saved = {}; }
+  for (const [k, d] of Object.entries(SETTING_DEFS)) out[k] = typeof saved[k] === 'boolean' ? saved[k] : d.default;
+  return out;
+}
+function currentSettings(){ return (room && room.settings) ? room.settings : loadPrefSettings(); }
+function renderSettings(){
+  const list = document.getElementById('settingsList'); if (!list) return;
+  const cur = currentSettings();
+  const locked = !!(room && room.started);
+  const hint = document.getElementById('settingsHint');
+  if (hint) hint.textContent = locked ? '游戏已开始，本局设置不能再修改（下一局开局前可以改）。' : (room ? '开局前房间里任何人都可以修改，修改会通知所有玩家。' : '这些设置会用于你接下来创建的房间。');
+  list.innerHTML = Object.entries(SETTING_DEFS).map(([k, d]) => {
+    const on = cur[k] !== false;
+    return `<div class="set-row"><div><div class="set-label">${d.label}</div><div class="set-desc">${d.desc}</div></div><button class="set-toggle${on ? ' on' : ''}" ${locked ? 'disabled' : ''} onclick="toggleSetting('${k}')">${on ? '开' : '关'}</button></div>`;
+  }).join('');
+}
+function toggleSetting(k){
+  if (room && room.started) return;
+  const cur = currentSettings();
+  const next = Object.assign({}, cur, { [k]: cur[k] === false });
+  try { localStorage.setItem('monopolySettings', JSON.stringify(next)); } catch (e) {}
+  if (room) socket.emit('update-settings', next); else renderSettings();
+}
+function openSettings(){ markSettingsGuideDone(); renderSettings(); openOverlay('settings'); }
+
+// ===== 设置引导气泡：2026-09-06 ~ 2026-09-08 期间每台设备只提示一次，9 月 9 日起自动下线 =====
+const SETTINGS_GUIDE_END = new Date(2026, 8, 8, 23, 59, 59).getTime();
+function settingsGuideActive(){
+  try { return Date.now() <= SETTINGS_GUIDE_END && !localStorage.getItem('settingsGuideDone'); } catch (e) { return false; }
+}
+function markSettingsGuideDone(){
+  try { localStorage.setItem('settingsGuideDone', '1'); } catch (e) {}
+  const g = document.getElementById('settingsGuide'); if (g) g.style.display = 'none';
+}
+function dismissSettingsGuide(){ markSettingsGuideDone(); }
+function updateSettingsGuide(){
+  const g = document.getElementById('settingsGuide'); if (!g) return;
+  if (room && room.started) { markSettingsGuideDone(); return; }   // 已经开始玩过了就不再提示
+  g.style.display = settingsGuideActive() ? '' : 'none';
+}
+
+// ===== 卖出地产 =====
+function sellValueOf(sp, level){ return Math.floor((sp.p || 0) / 2) + Math.floor(((sp.bc || 0) * (level || 0)) / 2); }
+function showSellModal(){
+  closeMenu();
+  if (!room || !room.started || room.finished) return;
+  const mi = room.players.findIndex(p => p.id === myId); const me = room.players[mi];
+  if (!me || me.bankrupt) return;
+  if (room.settings && room.settings.sellProperty === false) {
+    showModal(`<h3>🏷️ 卖出地产</h3><p style="margin:10px 0">本局设置不允许卖地产</p><div class="modal-btns"><button class="mo" onclick="hideModal()">确定</button></div>`);
+    return;
+  }
+  const mine = Object.entries(room.properties).filter(([_, v]) => v.owner === mi).map(([sid, v]) => ({ sp: S[+sid], level: v.level }));
+  const head = me.money <= 0
+    ? `<p style="margin:8px 0;color:#e74c3c;font-weight:700">⚠️ 你的资金为 ${me.money < 0 ? '-' : ''}¥${Math.abs(me.money).toLocaleString()}，需卖出地产还债后才能继续</p><p style="font-size:12px;color:#888;margin:4px 0">卖出价 = 地价 50% + 建筑 50%</p>`
+    : `<p style="margin:8px 0;font-size:12px;color:#888">当前资金 ¥${me.money.toLocaleString()} · 卖出价 = 地价 50% + 建筑 50%</p>`;
+  const rows = mine.length ? mine.map(({ sp, level }) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f5f5f5;font-size:13px"><span><span class="pc-dot" style="background:${sp.g ? GC[sp.g] : '#888'}">${sp.n}</span>${level > 0 ? ` <span style="font-size:11px;color:#888">Lv${level}</span>` : ''}</span><button class="mo" style="padding:6px 12px;font-size:12px" onclick="doSell(${sp.id})">卖出 ¥${sellValueOf(sp, level).toLocaleString()}</button></div>`).join('') : '<p style="color:#999;font-size:13px">你没有可卖的地产</p>';
+  showModal(`<h3>🏷️ 卖出地产</h3>${head}<div style="margin:8px 0;max-height:50vh;overflow:auto">${rows}</div><div class="modal-btns"><button class="mc" onclick="hideModal()">关闭</button></div>`);
+}
+function doSell(spaceId){ socket.emit('sell-property', { spaceId }); hideModal(); _reopenSell = true; }
+
+// ===== 结算弹窗（可重复查看） =====
+function showSettlement(){
+  closeMenu();
+  if (!room || !room.settlement) return;
+  const rows = room.settlement.filter(r=>!r.bankrupt).sort((a,b)=>b.total-a.total).map((r,i)=>{
+    const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}.`;
+    const propList = (r.props||[]).map(p=>`${p.name}${p.level>0?' Lv'+p.level:''}`).join('、') || '无地产';
+    return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f5f5f5;font-size:13px"><span>${medal} <b>${r.name}</b></span><span style="color:#27ae60;font-weight:700">¥${r.total.toLocaleString()}</span></div><div style="font-size:11px;color:#888;padding:0 0 2px 24px">现金 ¥${r.money.toLocaleString()} + 地产 ¥${r.propValue.toLocaleString()}</div><div style="font-size:11px;color:#aaa;padding:0 0 6px 24px">${propList}</div>`;
+  }).join('');
+  const bankrupt = room.settlement.filter(r=>r.bankrupt).map(r=>{
+    const propList = (r.props||[]).map(p=>`${p.name}${p.level>0?' Lv'+p.level:''} ¥${(p.value||0).toLocaleString()}`).join('、') || '无地产';
+    return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f5f5f5;font-size:13px"><span style="color:#999">💀 <b>${r.name}</b>（已退学）</span><span style="color:#aaa;font-size:11px">曾有资产 ¥${(r.propValue||0).toLocaleString()}</span></div><div style="font-size:11px;color:#aaa;padding:0 0 6px 24px">曾拥有: ${propList}</div>`;
+  }).join('');
+  showModal(`<h3>📊 游戏结算</h3><div style="margin:10px 0">${rows}</div>${bankrupt?'<div style="margin-top:8px">'+bankrupt+'</div>':''}<div class="modal-btns"><button class="mo" onclick="hideModal()">确定</button></div>`);
+}
 function closeOverlay(name){document.getElementById('ov-'+name).classList.remove('show');}
 
 // ===== PRINT =====
@@ -1130,7 +1271,7 @@ function side(id){if([0,10,20,30].includes(id))return'corner';if(id<10)return'bo
   S.filter(s=>s.t==='utility').forEach(sp=>{
     dg.innerHTML+=`<div class="deed-card"><div class="dc-color" style="background:#888"></div><div class="dc-name">${sp.i} ${sp.n}</div><div class="dc-sub">公用设施（租金=骰子点数×倍率）</div><hr>
     <div class="dc-row"><span>购买</span><b>¥${sp.p.toLocaleString()}</b></div><hr>
-    <div class="dc-row"><span>1个</span><span>骰子×8</span></div><div class="dc-row"><span>2个</span><span>骰子×20</span></div></div>`;
+    <div class="dc-row"><span>1个</span><span>骰子×40</span></div><div class="dc-row"><span>2个</span><span>骰子×100</span></div></div>`;
   });
   CHANCE.forEach(t=>{document.getElementById('chanceGrid').innerHTML+=`<div class="event-card chance"><div class="ev-title">📋 学生会通知</div>${t}</div>`;});
   CHEST.forEach(t=>{document.getElementById('chestGrid').innerHTML+=`<div class="event-card chest"><div class="ev-title">💰 奖学金</div>${t}</div>`;});
