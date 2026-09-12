@@ -80,13 +80,13 @@
     /* ===== GAME: BOARD ===== */
     .board-wrap{padding:8px;display:flex;justify-content:center;overflow:hidden}
     .board{
-      width:100%;max-width:722px;aspect-ratio:1;
+      width:100%;max-width:838px;aspect-ratio:1;
       display:grid;
-      grid-template-columns:100fr repeat(9,58fr) 100fr;
-      grid-template-rows:100fr repeat(9,58fr) 100fr;
+      grid-template-columns:100fr repeat(11,58fr) 100fr;
+      grid-template-rows:100fr repeat(11,58fr) 100fr;
       border:2px solid #444;background:#cde6d0;
     }
-    .board-center{grid-column:2/11;grid-row:2/11;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:8px;position:relative;overflow:hidden}
+    .board-center{grid-column:2/14;grid-row:2/14;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:8px;position:relative;overflow:hidden}
     .board-center .bc-bg{display:flex;flex-direction:column;align-items:center;justify-content:center}
     .board-center .gate{font-size:clamp(20px,5vw,40px)}
     .board-center h2{font-size:clamp(12px,3.5vw,24px);color:var(--purple);letter-spacing:4px}
@@ -224,8 +224,8 @@
       .topbar,.controls,.chat-toggle,.chat-panel,.voice-toggle,.mute-toggle,.dropdown,.game-footer{display:none!important}
       .board-wrap{padding:0}
       .board{max-width:none;width:260mm;height:260mm;border-width:2px;
-        grid-template-columns:36.1mm repeat(9,20.9mm) 36.1mm;
-        grid-template-rows:36.1mm repeat(9,20.9mm) 36.1mm}
+        grid-template-columns:30mm repeat(11,18.2mm) 30mm;
+        grid-template-rows:30mm repeat(11,18.2mm) 30mm}
       .cell .cell-name{font-size:8pt}.cell .cell-price{font-size:7pt}.cell .cell-icon{font-size:11pt}
       .cell.corner .cell-icon{font-size:17pt}.cell.corner .cell-name{font-size:8pt}
       .cell .color-bar{height:4mm!important;width:4mm!important}
@@ -392,9 +392,9 @@
   <div class="ov-body rules-body">
     <h3>游戏简介</h3><p>清华大富翁是以清华大学为主题的桌游，2~6名玩家在清华校园中购买地产、收取租金，成为最后的"清华首富"！</p>
     <h3>游戏准备</h3><ul><li>打印棋盘（建议A3彩色）</li><li>准备骰子两颗（或用在线掷骰子）</li><li>准备棋子（硬币、橡皮等均可）</li><li>每人起始资金 ¥10,000</li></ul>
-    <h3>基本规则</h3><ul><li><b>掷骰子前进</b>：每回合掷两颗骰子，按点数前进</li><li><b>经过起点</b>：收取 ¥1,500（可在“设置”里改为只有正好停在起点才收）</li><li><b>购买地产</b>：到达无主地产可按标价购买</li><li><b>收取租金</b>：到达他人地产需支付租金</li><li><b>升级地产</b>：落到自己的地产可花钱升级，租金大幅提升</li><li><b>卖出地产</b>：随时可按地价 50%＋建筑 50% 卖回；资金为负时先进入欠款状态，必须卖地产还债，卖光仍还不清才退学（可在“设置”里关闭）</li><li><b>同色加成</b>：集齐同色所有地产，租金翻倍</li><li><b>校门</b>：1个¥500 / 2个¥1,000 / 3个¥2,000 / 4个¥4,000</li><li><b>校园网/校园卡</b>：租金=骰子点数×40（1个）或×100（2个），不可升级</li></ul>
+    <h3>基本规则</h3><ul><li><b>掷骰子前进</b>：每回合掷两颗骰子，按点数前进</li><li><b>经过起点</b>：收取 ¥1,500（可在“设置”里改为只有正好停在起点才收）</li><li><b>购买地产</b>：到达无主地产可按标价购买</li><li><b>收取租金</b>：到达他人地产需支付租金</li><li><b>升级地产</b>：落到自己的地产可花钱升级，租金大幅提升</li><li><b>卖出地产</b>：随时可按地价 50%＋建筑 50% 卖回；资金为负时先进入欠款状态，必须卖地产还债，卖光仍还不清才退学（可在“设置”里关闭）</li><li><b>同色加成</b>：集齐同色所有地产，租金翻倍</li><li><b>校门</b>：1个¥500 / 2个¥1,000 / 3个¥2,000 / 4个¥4,000 / 5个全有¥6,000</li><li><b>校园网/快递站/校园卡</b>：租金=骰子点数×40（1个）、×100（2个）、×160（3个全有），不可升级</li></ul>
     <h3>特殊格子</h3><ul><li><b>学生会通知/奖学金</b>：抽卡执行</li><li><b>缴学费</b>：-¥2,000 / <b>交书本费</b>：-¥1,000</li><li><b>挂科补考（监狱）</b>：每回合选择交¥500补考费直接出狱，或掷骰子（双数出狱，非双数继续补考）；连续3回合未掷出双数则强制交¥500</li><li><b>被辅导员约谈</b>：直接进入补考</li><li><b>情人坡</b>：安全休息，不产生任何费用</li></ul>
-    <h3>校园网/校园卡</h3><ul><li>其他玩家踩到你的校园网/校园卡时，按骰子点数×倍率支付租金</li><li>拥有1个：租金 = 骰子点数 × 40</li><li>拥有2个：租金 = 骰子点数 × 100</li><li>不可升级</li></ul>
+    <h3>校园网/快递站/校园卡</h3><ul><li>其他玩家踩到你的公用设施时，按骰子点数×倍率支付租金</li><li>拥有1个：租金 = 骰子点数 × 40</li><li>拥有2个：租金 = 骰子点数 × 100</li><li>拥有3个（全有）：租金 = 骰子点数 × 160</li><li>不可升级</li></ul>
     <h3>胜利条件</h3><p>最后一名未退学的玩家顺利毕业获胜，或约定时间后资产最多者获胜。</p>
   </div>
 </div>
@@ -410,46 +410,54 @@ const S=[
   {id:1,n:'紫荆园',t:'property',g:'brown',p:700,bc:500,r:[50,100,250,700,2000,3600],i:'🍜'},
   {id:2,n:'奖学金',t:'chest',i:'💰'},
   {id:3,n:'清芬园',t:'property',g:'brown',p:700,bc:500,r:[100,200,450,1400,4000,7200],i:'🍛'},
-  {id:4,n:'缴学费',t:'tax',a:2000,i:'💸'},
-  {id:5,n:'东门',t:'railroad',p:2500,i:'🚪'},
-  {id:6,n:'桃李园',t:'property',g:'lightblue',p:1200,bc:500,r:[150,300,700,2000,6000,9000],i:'🍱'},
-  {id:7,n:'学生会通知',t:'chance',i:'📋'},
-  {id:8,n:'听涛园',t:'property',g:'lightblue',p:1200,bc:500,r:[150,300,700,2000,6000,9000],i:'🍲'},
-  {id:9,n:'芝兰园',t:'property',g:'lightblue',p:1400,bc:500,r:[200,400,900,2250,6750,10000],i:'🥘'},
-  {id:10,n:'挂科补考',t:'jail',i:'📝'},
-  {id:11,n:'六教',t:'property',g:'pink',p:1700,bc:1000,r:[250,500,1100,3400,10000,14000],i:'📚'},
-  {id:12,n:'校园网',t:'utility',p:1800,i:'📶'},
-  {id:13,n:'四教',t:'property',g:'pink',p:1700,bc:1000,r:[250,500,1100,3400,10000,14000],i:'🏫'},
-  {id:14,n:'法学院',t:'property',g:'pink',p:1900,bc:1000,r:[300,550,1350,4000,11000,15500],i:'⚖️'},
-  {id:15,n:'南门',t:'railroad',p:2500,i:'🚪'},
-  {id:16,n:'紫荆操场',t:'property',g:'orange',p:2200,bc:1000,r:[350,650,1600,4500,12500,17000],i:'🎯'},
-  {id:17,n:'奖学金',t:'chest',i:'💰'},
-  {id:18,n:'北体育馆',t:'property',g:'orange',p:2200,bc:1000,r:[350,650,1600,4500,12500,17000],i:'🏋️'},
-  {id:19,n:'综合体育馆',t:'property',g:'orange',p:2400,bc:1000,r:[400,750,1800,5000,13500,18000],i:'🏟️'},
-  {id:20,n:'情人坡',t:'parking',i:'💕'},
-  {id:21,n:'李文正馆',t:'property',g:'red',p:2600,bc:1500,r:[400,800,2000,5600,15500,19500],i:'📖'},
-  {id:22,n:'学生会通知',t:'chance',i:'📋'},
-  {id:23,n:'美术学院',t:'property',g:'red',p:2600,bc:1500,r:[400,800,2000,5600,15500,19500],i:'🎨'},
-  {id:24,n:'经管学院',t:'property',g:'red',p:2900,bc:1500,r:[450,900,2250,6750,17000,21000],i:'💼'},
-  {id:25,n:'西门',t:'railroad',p:2500,i:'🚪'},
-  {id:26,n:'大礼堂',t:'property',g:'yellow',p:3100,bc:1500,r:[500,1000,2500,7500,18000,22000],i:'🏛️'},
-  {id:27,n:'新清华学堂',t:'property',g:'yellow',p:3100,bc:1500,r:[500,1000,2500,7500,18000,22000],i:'🎭'},
-  {id:28,n:'校园卡',t:'utility',p:1800,i:'💳'},
-  {id:29,n:'蒙民伟音乐厅',t:'property',g:'yellow',p:3400,bc:1500,r:[550,1100,2700,8000,19000,23000],i:'🎵'},
-  {id:30,n:'被辅导员约谈',t:'gotojail',i:'😱'},
-  {id:31,n:'主楼',t:'property',g:'green',p:3600,bc:2000,r:[600,1200,2900,8800,20000,25000],i:'🏢'},
-  {id:32,n:'工字厅',t:'property',g:'green',p:3600,bc:2000,r:[600,1200,2900,8800,20000,25000],i:'🏯'},
-  {id:33,n:'奖学金',t:'chest',i:'💰'},
-  {id:34,n:'C楼',t:'property',g:'green',p:3800,bc:2000,r:[650,1300,3400,10000,22500,27000],i:'📐'},
-  {id:35,n:'北门',t:'railroad',p:2500,i:'🚪'},
-  {id:36,n:'学生会通知',t:'chance',i:'📋'},
-  {id:37,n:'苏世民书院',t:'property',g:'darkblue',p:4200,bc:2000,r:[800,1600,4000,11000,25000,29000],i:'🌍'},
-  {id:38,n:'交书本费',t:'tax',a:1000,i:'📕'},
-  {id:39,n:'二校门',t:'property',g:'darkblue',p:4800,bc:2000,r:[1100,2250,4500,13500,31500,38000],i:'⛩️'},
+  {id:4,n:'观畴园',t:'property',g:'brown',p:900,bc:500,r:[120,240,550,1600,4500,8000],i:'🍚'},
+  {id:5,n:'缴学费',t:'tax',a:2000,i:'💸'},
+  {id:6,n:'东门',t:'railroad',p:2500,i:'🚪'},
+  {id:7,n:'桃李园',t:'property',g:'lightblue',p:1200,bc:500,r:[150,300,700,2000,6000,9000],i:'🍱'},
+  {id:8,n:'学生会通知',t:'chance',i:'📋'},
+  {id:9,n:'听涛园',t:'property',g:'lightblue',p:1200,bc:500,r:[150,300,700,2000,6000,9000],i:'🍲'},
+  {id:10,n:'芝兰园',t:'property',g:'lightblue',p:1400,bc:500,r:[200,400,900,2250,6750,10000],i:'🥘'},
+  {id:11,n:'奖学金',t:'chest',i:'💰'},
+  {id:12,n:'挂科补考',t:'jail',i:'📝'},
+  {id:13,n:'六教',t:'property',g:'pink',p:1700,bc:1000,r:[250,500,1100,3400,10000,14000],i:'📚'},
+  {id:14,n:'校园网',t:'utility',p:1800,i:'📶'},
+  {id:15,n:'四教',t:'property',g:'pink',p:1700,bc:1000,r:[250,500,1100,3400,10000,14000],i:'🏫'},
+  {id:16,n:'法学院',t:'property',g:'pink',p:1900,bc:1000,r:[300,550,1350,4000,11000,15500],i:'⚖️'},
+  {id:17,n:'南门',t:'railroad',p:2500,i:'🚪'},
+  {id:18,n:'紫荆操场',t:'property',g:'orange',p:2200,bc:1000,r:[350,650,1600,4500,12500,17000],i:'🎯'},
+  {id:19,n:'奖学金',t:'chest',i:'💰'},
+  {id:20,n:'北体育馆',t:'property',g:'orange',p:2200,bc:1000,r:[350,650,1600,4500,12500,17000],i:'🏋️'},
+  {id:21,n:'综合体育馆',t:'property',g:'orange',p:2400,bc:1000,r:[400,750,1800,5000,13500,18000],i:'🏟️'},
+  {id:22,n:'紫荆公寓',t:'property',g:'purple',p:2500,bc:1500,r:[420,800,1900,5300,14000,18500],i:'🛏️'},
+  {id:23,n:'南区宿舍',t:'property',g:'purple',p:2500,bc:1500,r:[420,800,1900,5300,14000,18500],i:'🏠'},
+  {id:24,n:'情人坡',t:'parking',i:'💕'},
+  {id:25,n:'李文正馆',t:'property',g:'red',p:2600,bc:1500,r:[400,800,2000,5600,15500,19500],i:'📖'},
+  {id:26,n:'学生会通知',t:'chance',i:'📋'},
+  {id:27,n:'美术学院',t:'property',g:'red',p:2600,bc:1500,r:[400,800,2000,5600,15500,19500],i:'🎨'},
+  {id:28,n:'经管学院',t:'property',g:'red',p:2900,bc:1500,r:[450,900,2250,6750,17000,21000],i:'💼'},
+  {id:29,n:'西门',t:'railroad',p:2500,i:'🚪'},
+  {id:30,n:'大礼堂',t:'property',g:'yellow',p:3100,bc:1500,r:[500,1000,2500,7500,18000,22000],i:'🏛️'},
+  {id:31,n:'新清华学堂',t:'property',g:'yellow',p:3100,bc:1500,r:[500,1000,2500,7500,18000,22000],i:'🎭'},
+  {id:32,n:'快递站',t:'utility',p:1800,i:'📦'},
+  {id:33,n:'校园卡',t:'utility',p:1800,i:'💳'},
+  {id:34,n:'蒙民伟音乐厅',t:'property',g:'yellow',p:3400,bc:1500,r:[550,1100,2700,8000,19000,23000],i:'🎵'},
+  {id:35,n:'学生会通知',t:'chance',i:'📋'},
+  {id:36,n:'被辅导员约谈',t:'gotojail',i:'😱'},
+  {id:37,n:'主楼',t:'property',g:'green',p:3600,bc:2000,r:[600,1200,2900,8800,20000,25000],i:'🏢'},
+  {id:38,n:'工字厅',t:'property',g:'green',p:3600,bc:2000,r:[600,1200,2900,8800,20000,25000],i:'🏯'},
+  {id:39,n:'奖学金',t:'chest',i:'💰'},
+  {id:40,n:'C楼',t:'property',g:'green',p:3800,bc:2000,r:[650,1300,3400,10000,22500,27000],i:'📐'},
+  {id:41,n:'北门',t:'railroad',p:2500,i:'🚪'},
+  {id:42,n:'西北门',t:'railroad',p:2500,i:'🚪'},
+  {id:43,n:'学生会通知',t:'chance',i:'📋'},
+  {id:44,n:'水木清华',t:'property',g:'darkblue',p:4500,bc:2000,r:[950,1900,4200,12000,28000,33000],i:'🏞️'},
+  {id:45,n:'苏世民书院',t:'property',g:'darkblue',p:4200,bc:2000,r:[800,1600,4000,11000,25000,29000],i:'🌍'},
+  {id:46,n:'交书本费',t:'tax',a:1000,i:'📕'},
+  {id:47,n:'二校门',t:'property',g:'darkblue',p:4800,bc:2000,r:[1100,2250,4500,13500,31500,38000],i:'⛩️'},
 ];
-const GC={brown:'#8B4513',lightblue:'#87CEEB',pink:'#DB7093',orange:'#FF8C00',red:'#DC143C',yellow:'#FFD700',green:'#228B22',darkblue:'#191970'};
-const GN={brown:'食堂区(棕)',lightblue:'食堂区(蓝)',pink:'教学楼(粉)',orange:'运动场(橙)',red:'学术楼(红)',yellow:'文化场馆(黄)',green:'历史名胜(绿)',darkblue:'标志建筑(蓝)'};
-const CG={brown:[1,3],lightblue:[6,8,9],pink:[11,13,14],orange:[16,18,19],red:[21,23,24],yellow:[26,27,29],green:[31,32,34],darkblue:[37,39]};
+const GC={brown:'#8B4513',lightblue:'#87CEEB',pink:'#DB7093',orange:'#FF8C00',red:'#DC143C',yellow:'#FFD700',green:'#228B22',darkblue:'#191970',purple:'#9B59B6'};
+const GN={brown:'食堂区(棕)',lightblue:'食堂区(蓝)',pink:'教学楼(粉)',orange:'运动场(橙)',purple:'宿舍区(紫)',red:'学术楼(红)',yellow:'文化场馆(黄)',green:'历史名胜(绿)',darkblue:'标志建筑(蓝)'};
+const CG={brown:[1,3,4],lightblue:[7,9,10],pink:[13,15,16],orange:[18,20,21],purple:[22,23],red:[25,27,28],yellow:[30,31,34],green:[37,38,40],darkblue:[44,45,47]};
 const ROLES={
   freshman:      {name:'新生',   emoji:'🎒',buff:'无特殊效果',debuff:''},
   athlete:       {name:'体育生', emoji:'🏃',buff:'每次掷骰多走2步',debuff:'踩到食堂(棕/蓝)付双倍租金'},
@@ -869,7 +877,7 @@ function boardZoomTo(spaceId){
 function stepMove(pi, from, to, cb){
   const steps=[];
   let pos=from;
-  while(pos!==to){ pos=(pos+1)%40; steps.push(pos); }
+  while(pos!==to){ pos=(pos+1)%48; steps.push(pos); }
   room.players[pi].position = from;
   updateTokens();
   const moveInfo=document.getElementById('moveInfo');
@@ -1227,11 +1235,11 @@ function printBoard(){closeMenu();window.print();}
 
 // ===== BOARD =====
 function getPos(id){
-  if(id===0)return{c:11,r:11};if(id<=9)return{c:11-id,r:11};if(id===10)return{c:1,r:11};
-  if(id<=19)return{c:1,r:11-(id-10)};if(id===20)return{c:1,r:1};
-  if(id<=29)return{c:id-19,r:1};if(id===30)return{c:11,r:1};return{c:11,r:id-29};
+  if(id===0)return{c:13,r:13};if(id<=11)return{c:13-id,r:13};if(id===12)return{c:1,r:13};
+  if(id<=23)return{c:1,r:13-(id-12)};if(id===24)return{c:1,r:1};
+  if(id<=35)return{c:id-23,r:1};if(id===36)return{c:13,r:1};return{c:13,r:id-35};
 }
-function side(id){if([0,10,20,30].includes(id))return'corner';if(id<10)return'bottom';if(id<20)return'left';if(id<30)return'top';return'right';}
+function side(id){if([0,12,24,36].includes(id))return'corner';if(id<12)return'bottom';if(id<24)return'left';if(id<36)return'top';return'right';}
 
 (function renderBoard(){
   const board=document.getElementById('board');
@@ -1266,12 +1274,13 @@ function side(id){if([0,10,20,30].includes(id))return'corner';if(id<10)return'bo
     dg.innerHTML+=`<div class="deed-card"><div class="dc-color" style="background:#555"></div><div class="dc-name">${sp.i} ${sp.n}</div><div class="dc-sub">校门</div><hr>
     <div class="dc-row"><span>购买</span><b>¥${sp.p.toLocaleString()}</b></div><hr>
     <div class="dc-row"><span>1个</span><span>¥500</span></div><div class="dc-row"><span>2个</span><span>¥1,000</span></div>
-    <div class="dc-row"><span>3个</span><span>¥2,000</span></div><div class="dc-row"><span>4个</span><span>¥4,000</span></div></div>`;
+    <div class="dc-row"><span>3个</span><span>¥2,000</span></div><div class="dc-row"><span>4个</span><span>¥4,000</span></div>
+    <div class="dc-row"><span>5个全有</span><span>¥6,000</span></div></div>`;
   });
   S.filter(s=>s.t==='utility').forEach(sp=>{
     dg.innerHTML+=`<div class="deed-card"><div class="dc-color" style="background:#888"></div><div class="dc-name">${sp.i} ${sp.n}</div><div class="dc-sub">公用设施（租金=骰子点数×倍率）</div><hr>
     <div class="dc-row"><span>购买</span><b>¥${sp.p.toLocaleString()}</b></div><hr>
-    <div class="dc-row"><span>1个</span><span>骰子×40</span></div><div class="dc-row"><span>2个</span><span>骰子×100</span></div></div>`;
+    <div class="dc-row"><span>1个</span><span>骰子×40</span></div><div class="dc-row"><span>2个</span><span>骰子×100</span></div><div class="dc-row"><span>3个全有</span><span>骰子×160</span></div></div>`;
   });
   CHANCE.forEach(t=>{document.getElementById('chanceGrid').innerHTML+=`<div class="event-card chance"><div class="ev-title">📋 学生会通知</div>${t}</div>`;});
   CHEST.forEach(t=>{document.getElementById('chestGrid').innerHTML+=`<div class="event-card chest"><div class="ev-title">💰 奖学金</div>${t}</div>`;});

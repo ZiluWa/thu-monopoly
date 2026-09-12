@@ -151,14 +151,21 @@ const rooms = new Map();
 const socketRoom = new Map();
 
 const COLORS = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c'];
-const NAMES = ['入学报到','紫荆园','奖学金','清芬园','缴学费','东门','桃李园','学生会通知','听涛园','芝兰园','挂科补考','六教','校园网','四教','法学院','南门','紫荆操场','奖学金','北体育馆','综合体育馆','情人坡','李文正馆','学生会通知','美术学院','经管学院','西门','大礼堂','新清华学堂','校园卡','蒙民伟音乐厅','被辅导员约谈','主楼','工字厅','奖学金','C楼','北门','学生会通知','苏世民书院','交书本费','二校门'];
-const PRICES = {1:700,3:700,5:2500,6:1200,8:1200,9:1400,11:1700,12:1800,13:1700,14:1900,15:2500,16:2200,18:2200,19:2400,21:2600,23:2600,24:2900,25:2500,26:3100,27:3100,28:1800,29:3400,31:3600,32:3600,34:3800,35:2500,37:4200,39:4800};
-const BUILDING_COSTS = {1:500,3:500,6:500,8:500,9:500,11:1000,13:1000,14:1000,16:1000,18:1000,19:1000,21:1500,23:1500,24:1500,26:1500,27:1500,29:1500,31:2000,32:2000,34:2000,37:2000,39:2000};
+const NAMES = ['入学报到','紫荆园','奖学金','清芬园','观畴园','缴学费','东门','桃李园','学生会通知','听涛园','芝兰园','奖学金','挂科补考','六教','校园网','四教','法学院','南门','紫荆操场','奖学金','北体育馆','综合体育馆','紫荆公寓','南区宿舍','情人坡','李文正馆','学生会通知','美术学院','经管学院','西门','大礼堂','新清华学堂','快递站','校园卡','蒙民伟音乐厅','学生会通知','被辅导员约谈','主楼','工字厅','奖学金','C楼','北门','西北门','学生会通知','水木清华','苏世民书院','交书本费','二校门'];
+const PRICES = {1:700,3:700,4:900,6:2500,7:1200,9:1200,10:1400,13:1700,14:1800,15:1700,16:1900,17:2500,18:2200,20:2200,21:2400,22:2500,23:2500,25:2600,27:2600,28:2900,29:2500,30:3100,31:3100,32:1800,33:1800,34:3400,37:3600,38:3600,40:3800,41:2500,42:2500,44:4500,45:4200,47:4800};
+const BUILDING_COSTS = {1:500,3:500,4:500,7:500,9:500,10:500,13:1000,15:1000,16:1000,18:1000,20:1000,21:1000,22:1500,23:1500,25:1500,27:1500,28:1500,30:1500,31:1500,34:1500,37:2000,38:2000,40:2000,44:2000,45:2000,47:2000};
 // 卖出价：地价 50% + 建筑 50%（即契约卡上的“抵押”价）
 function sellValue(sid, level) { return Math.floor((PRICES[sid] || 0) / 2) + Math.floor(((BUILDING_COSTS[sid] || 0) * (level || 0)) / 2); }
 function sellableTotal(room, pi) { return Object.entries(room.properties).filter(([_, pr]) => pr.owner === pi).reduce((sum, [sid, pr]) => sum + sellValue(+sid, pr.level), 0); }
-const COLOR_GROUPS = {brown:[1,3],lightblue:[6,8,9],pink:[11,13,14],orange:[16,18,19],red:[21,23,24],yellow:[26,27,29],green:[31,32,34],darkblue:[37,39]};
+const COLOR_GROUPS = {brown:[1,3,4],lightblue:[7,9,10],pink:[13,15,16],orange:[18,20,21],purple:[22,23],red:[25,27,28],yellow:[30,31,34],green:[37,38,40],darkblue:[44,45,47]};
 const SPACE_GROUP = {}; for(const[g,ids] of Object.entries(COLOR_GROUPS)) ids.forEach(id=>SPACE_GROUP[id]=g);
+// 48 格棋盘（每边 12 格，四角为 0/12/24/36）的关键格子
+const BOARD_SIZE = 48;
+const JAIL_POS = 12;                              // 挂科补考
+const GATES = [6,17,29,41,42];                    // 五个校门
+const UTILITIES = [14,32,33];                     // 校园网、快递站、校园卡
+const CHANCE_TILES = [8,26,35,43];                // 学生会通知（抽卡）
+const CHEST_TILES = [2,11,19,39];                 // 奖学金（抽卡）
 const ROLES = {
   freshman:      { name:'新生',   emoji:'🎒', startMoney:0, diceBonus:0 },
   athlete:       { name:'体育生', emoji:'🏃', startMoney:0, diceBonus:2 },
@@ -214,13 +221,13 @@ const CHANCE_CARDS = [
   { text: '选课系统崩溃，重选的课要买新教材，支付 ¥400', amount: -400 },
   { text: '期末在C楼通宵赶DDL，咖啡外卖费 ¥400', amount: -400 },
   // ---- 2026-09 新增 ----
-  { text: '校庆志愿者被抓壮丁，前往「大礼堂」（无主可买，有主付租）', goTo: 26 },
+  { text: '校庆志愿者被抓壮丁，前往「大礼堂」（无主可买，有主付租）', goTo: 30 },
   { text: '自行车没气了，退后 3 格', moveBack: 3 },
   { text: '期中考试周到了，直接进入补考', goToJail: true },
   { text: '宿舍查寝违规，每处地产交 ¥200 整改费，每级建筑再加 ¥100', repairs: { perProperty: 200, perLevel: 100 } },
   { text: '拿到大厂实习 offer，收取 ¥2,000', amount: 2000 },
   { text: '校园卡丢了，补办支付 ¥200', amount: -200 },
-  { text: '抢到了陈明游泳馆的课，前往「综合体育馆」', goTo: 19 },
+  { text: '抢到了陈明游泳馆的课，前往「综合体育馆」', goTo: 21 },
   { text: '被拉去学生节当演员，每位玩家给你 ¥200 打赏', collect: 200 },
   { text: '校车坐过站，前往最近的校门；若有主，付双倍租金', nearestRailroad: true },
   { text: '登上清华官微，收取 ¥1,000', amount: 1000 },
@@ -322,14 +329,14 @@ function applyLanding(room, code, ci, ctx) {
   const p = room.players[ci];
   const total = ctx.total;
   if ((ctx.depth || 0) > 3) return;
-  if (p.position === 4) { p.money -= 2000; addLog(room, `${p.name} 缴学费 -¥2,000`); }
-  else if (p.position === 38) { p.money -= 1000; addLog(room, `${p.name} 交书本费 -¥1,000`); }
-  else if (p.position === 30) { p.position = 10; p.inJail = true; addLog(room, `${p.name} 被辅导员约谈，进入补考！`); return; }
-  else if (p.position === 20) { addLog(room, `💕 ${p.name} 在情人坡休息`); }
+  if (p.position === 5) { p.money -= 2000; addLog(room, `${p.name} 缴学费 -¥2,000`); }
+  else if (p.position === 46) { p.money -= 1000; addLog(room, `${p.name} 交书本费 -¥1,000`); }
+  else if (p.position === 36) { p.position = JAIL_POS; p.inJail = true; addLog(room, `${p.name} 被辅导员约谈，进入补考！`); return; }
+  else if (p.position === 24) { addLog(room, `💕 ${p.name} 在情人坡休息`); }
 
   // Chance / Chest cards
-  const isChance = [7,22,36].includes(p.position);
-  const isChest = [2,17,33].includes(p.position);
+  const isChance = CHANCE_TILES.includes(p.position);
+  const isChest = CHEST_TILES.includes(p.position);
   if (isChance || isChest) {
     const deck = isChance ? CHANCE_CARDS : CHEST_CARDS;
     const card = deck[Math.floor(Math.random() * deck.length)];
@@ -342,16 +349,16 @@ function applyLanding(room, code, ci, ctx) {
   // Rent: if landing on owned property
   const prop = room.properties[p.position];
   if (prop && prop.owner !== ci) {
-    const sp = {1:1,3:3,6:6,8:8,9:9,11:11,13:13,14:14,16:16,18:18,19:19,21:21,23:23,24:24,26:26,27:27,29:29,31:31,32:32,34:34,37:37,39:39};
     const RENTS = {
-      1:[50,100,250,700,2000,3600],3:[100,200,450,1400,4000,7200],
-      6:[150,300,700,2000,6000,9000],8:[150,300,700,2000,6000,9000],9:[200,400,900,2250,6750,10000],
-      11:[250,500,1100,3400,10000,14000],13:[250,500,1100,3400,10000,14000],14:[300,550,1350,4000,11000,15500],
-      16:[350,650,1600,4500,12500,17000],18:[350,650,1600,4500,12500,17000],19:[400,750,1800,5000,13500,18000],
-      21:[400,800,2000,5600,15500,19500],23:[400,800,2000,5600,15500,19500],24:[450,900,2250,6750,17000,21000],
-      26:[500,1000,2500,7500,18000,22000],27:[500,1000,2500,7500,18000,22000],29:[550,1100,2700,8000,19000,23000],
-      31:[600,1200,2900,8800,20000,25000],32:[600,1200,2900,8800,20000,25000],34:[650,1300,3400,10000,22500,27000],
-      37:[800,1600,4000,11000,25000,29000],39:[1100,2250,4500,13500,31500,38000]
+      1:[50,100,250,700,2000,3600],3:[100,200,450,1400,4000,7200],4:[120,240,550,1600,4500,8000],
+      7:[150,300,700,2000,6000,9000],9:[150,300,700,2000,6000,9000],10:[200,400,900,2250,6750,10000],
+      13:[250,500,1100,3400,10000,14000],15:[250,500,1100,3400,10000,14000],16:[300,550,1350,4000,11000,15500],
+      18:[350,650,1600,4500,12500,17000],20:[350,650,1600,4500,12500,17000],21:[400,750,1800,5000,13500,18000],
+      22:[420,800,1900,5300,14000,18500],23:[420,800,1900,5300,14000,18500],
+      25:[400,800,2000,5600,15500,19500],27:[400,800,2000,5600,15500,19500],28:[450,900,2250,6750,17000,21000],
+      30:[500,1000,2500,7500,18000,22000],31:[500,1000,2500,7500,18000,22000],34:[550,1100,2700,8000,19000,23000],
+      37:[600,1200,2900,8800,20000,25000],38:[600,1200,2900,8800,20000,25000],40:[650,1300,3400,10000,22500,27000],
+      44:[950,1900,4200,12000,28000,33000],45:[800,1600,4000,11000,25000,29000],47:[1100,2250,4500,13500,31500,38000]
     };
     const owner = room.players[prop.owner];
     let rent = 0;
@@ -364,14 +371,14 @@ function applyLanding(room, code, ci, ctx) {
         const ownsAll = groupIds.every(id => room.properties[id] && room.properties[id].owner === prop.owner);
         if (ownsAll) rent *= 2;
       }
-    } else if ([5,15,25,35].includes(p.position)) {
-      // Railroad
-      const rrCount = [5,15,25,35].filter(id=>room.properties[id]&&room.properties[id].owner===prop.owner).length;
-      rent = [0,500,1000,2000,4000][rrCount] * (ctx.rentMult || 1);   // 校车坐过站：双倍
-    } else if ([12,28].includes(p.position)) {
-      // Utility
-      const uCount = [12,28].filter(id=>room.properties[id]&&room.properties[id].owner===prop.owner).length;
-      rent = total * (uCount===2?100:40);
+    } else if (GATES.includes(p.position)) {
+      // 校门：拥有 1-5 个的阶梯租金，5 个全有 ¥6,000
+      const rrCount = GATES.filter(id=>room.properties[id]&&room.properties[id].owner===prop.owner).length;
+      rent = [0,500,1000,2000,4000,6000][rrCount] * (ctx.rentMult || 1);   // 校车坐过站：双倍
+    } else if (UTILITIES.includes(p.position)) {
+      // 公用设施：拥有 1 个骰子×40，2 个×100，3 个全有×160
+      const uCount = UTILITIES.filter(id=>room.properties[id]&&room.properties[id].owner===prop.owner).length;
+      rent = total * (uCount===3?160:uCount===2?100:40);
     }
     if (rent > 0) {
       // Role bonuses for rent
@@ -398,7 +405,7 @@ function applyCard(room, code, ci, card, ctx) {
   if (card.pay) { for (const o of others) { p.money -= card.pay; o.money += card.pay; } return false; }
   if (card.amount) p.money += card.amount;
   if (card.moveTo !== undefined) { p.position = card.moveTo; return false; }   // 旧卡“前往起点”：只移动，不触发落地
-  if (card.goToJail) { p.position = 10; p.inJail = true; addLog(room, `${p.name} 进入补考！`); return true; }
+  if (card.goToJail) { p.position = JAIL_POS; p.inJail = true; addLog(room, `${p.name} 进入补考！`); return true; }
   if (card.repairs) {
     let fee = 0;
     for (const pr of Object.values(room.properties)) if (pr.owner === ci) fee += card.repairs.perProperty + card.repairs.perLevel * (pr.level || 0);
@@ -408,8 +415,8 @@ function applyCard(room, code, ci, card, ctx) {
   }
   let target;
   if (card.goTo !== undefined) target = card.goTo;
-  else if (card.moveBack) target = (p.position - card.moveBack + 40) % 40;
-  else if (card.nearestRailroad) { const rr = [5,15,25,35]; target = rr.find(id => id > p.position) ?? rr[0]; }
+  else if (card.moveBack) target = (p.position - card.moveBack + BOARD_SIZE) % BOARD_SIZE;
+  else if (card.nearestRailroad) { target = GATES.find(id => id > p.position) ?? GATES[0]; }
   if (target === undefined) return false;
   const from = p.position;
   p.position = target;
@@ -772,7 +779,7 @@ io.on('connection', (socket) => {
         const total = Math.max(d1 + d2 + roleBonus, 1);
         const bonusStr = roleBonus > 0 ? `+${roleBonus}` : roleBonus < 0 ? `${roleBonus}` : '';
         const oldPos = p.position;
-        p.position = (p.position + total) % 40;
+        p.position = (p.position + total) % BOARD_SIZE;
         addLog(room, `${p.name} 掷出 ${d1}+${d2}${bonusStr}=${total} (双数！)，补考通过！前进到「${NAMES[p.position]}」`);
         if (room.settings?.passGoMoney ? p.position < oldPos : p.position === 0) {
           const goMoney = p.role === 'alumni' ? 2000 : 1500;
@@ -820,7 +827,7 @@ io.on('connection', (socket) => {
     const roleBonus = ROLES[p.role]?.diceBonus || 0;
     const total = Math.max(d1 + d2 + roleBonus, 1);
     const oldPos = p.position;
-    p.position = (p.position + total) % 40;
+    p.position = (p.position + total) % BOARD_SIZE;
     const sn = NAMES[p.position]||'?';
     const dbl = d1===d2 ? ' (双数！)' : '';
     const bonusStr = roleBonus > 0 ? `+${roleBonus}` : roleBonus < 0 ? `${roleBonus}` : '';
