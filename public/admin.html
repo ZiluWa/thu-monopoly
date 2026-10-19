@@ -199,7 +199,7 @@ function refresh() {
         rb.innerHTML = '<tr><td colspan="4" class="empty">无活跃房间</td></tr>';
       } else {
         rb.innerHTML = d.roomList.map(r => {
-          const names = r.players.map(p => (p.roleEmoji||'🎒') + p.name + '(' + (p.roleName||'新生') + ')' + (p.disconnected ? '<span style="color:#e74c3c">(离线)</span>' : '')).join(', ');
+          const names = r.players.map(p => (p.roleEmoji||'🎒') + p.name + '(' + (p.roleName||'新生') + ')' + (p.disconnected ? '<span style="color:#e74c3c">(离线)</span>' : p.offline ? '<span style="color:#e67e22">(掉线中)</span>' : '')).join(', ');
           const status = r.started
             ? '<span class="badge playing">游戏中</span>'
             : '<span class="badge waiting">等待中</span>';

@@ -25,7 +25,8 @@ app.use(express.static(path.join(__dirname, 'public'), {
 }));
 
 // ===== Stats (persistent) =====
-const DATA_DIR = process.env.FLY_APP_NAME ? '/data' : path.join(__dirname, 'data');
+// DATA_DIR 可用环境变量指定（测试用临时目录，免得改到本地 data/stats.json）
+const DATA_DIR = process.env.DATA_DIR || (process.env.FLY_APP_NAME ? '/data' : path.join(__dirname, 'data'));
 const STATS_FILE = path.join(DATA_DIR, 'stats.json');
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'monopoly2024';
 
@@ -46,6 +47,26 @@ function saveStats() {
 
 const stats = loadStats();
 const serverStartTime = Date.now();
+
+// ===== 连接日志：每次连上/断开记一行（断开原因、连了多久、从哪个 Fly 节点进来、什么浏览器），用来排查掉线 =====
+// 存在卷上 /data/netlog.jsonl，超过 5MB 轮换一次；后台 /api/netlog 可以查看
+const NETLOG_FILE = path.join(DATA_DIR, 'netlog.jsonl');
+function uaFamily(ua) {
+  const s = String(ua || '');
+  const os = /iPhone|iPad|iPod/i.test(s) ? 'ios' : /Android/i.test(s) ? 'android' : /Mac OS X/i.test(s) ? 'mac' : /Windows/i.test(s) ? 'win' : 'other';
+  const app = /MicroMessenger/i.test(s) ? 'wechat' : /\bQQ\//.test(s) ? 'qq' : /DingTalk/i.test(s) ? 'dingtalk' : /Lark|Feishu/i.test(s) ? 'feishu'
+    : /Edg\//.test(s) ? 'edge' : /Chrome\/|CriOS/.test(s) ? 'chrome' : /Firefox\/|FxiOS/.test(s) ? 'firefox' : /Safari\//.test(s) ? 'safari' : 'other';
+  return `${os}-${app}`;
+}
+function netlog(obj) {
+  const line = JSON.stringify({ t: new Date().toISOString(), ...obj });
+  console.log('[net]', line);
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.appendFileSync(NETLOG_FILE, line + '\n');
+    if (Math.random() < 0.02 && fs.statSync(NETLOG_FILE).size > 5e6) fs.renameSync(NETLOG_FILE, NETLOG_FILE + '.1');
+  } catch (e) {}
+}
 
 // Save stats periodically (every 60s) and on exit
 // Trim logs older than 90 days every hour
@@ -72,7 +93,7 @@ app.get('/api/stats', adminAuth, (req, res) => {
   for (const [code, room] of rooms) {
     roomList.push({
       code,
-      players: room.players.map(p => ({ name: p.name, disconnected: p.disconnected, role: p.role, roleName: ROLES[p.role]?.name || '新生', roleEmoji: ROLES[p.role]?.emoji || '🎒' })),
+      players: room.players.map(p => ({ name: p.name, disconnected: p.disconnected, offline: !!p.offline, role: p.role, roleName: ROLES[p.role]?.name || '新生', roleEmoji: ROLES[p.role]?.emoji || '🎒' })),
       started: room.started,
       round: room.round,
     });
@@ -126,6 +147,14 @@ app.get('/api/stats', adminAuth, (req, res) => {
   });
 });
 
+// 连接日志（最近 n 行，默认 500）
+app.get('/api/netlog', adminAuth, (req, res) => {
+  const n = Math.min(Math.max(parseInt(req.query.n, 10) || 500, 1), 20000);
+  let lines = [];
+  try { lines = fs.readFileSync(NETLOG_FILE, 'utf8').trim().split('\n'); } catch (e) {}
+  res.type('text/plain; charset=utf-8').send(lines.slice(-n).join('\n'));
+});
+
 // ===== Rate Limiting =====
 // Per-socket event rate limiter: prevents any single connection from spamming
 function rateLimit(socket, event, maxPerWindow, windowMs) {
@@ -139,10 +168,19 @@ function rateLimit(socket, event, maxPerWindow, windowMs) {
   return false;
 }
 
+// 每个事件处理都包一层 try/catch：某个客户端发来异常数据时只记日志，不让整个服务器崩掉（一崩所有房间都会丢）
+function safe(event, handler) {
+  return (...args) => {
+    try { handler(...args); }
+    catch (e) { console.error(`[err] ${event}:`, (e && e.stack) || e); }
+  };
+}
+
 function guarded(socket, event, limit, windowMs, handler) {
+  const run = safe(event, handler);
   socket.on(event, (...args) => {
     if (rateLimit(socket, event, limit, windowMs)) return;
-    handler(...args);
+    run(...args);
   });
 }
 
@@ -275,9 +313,12 @@ function addLog(room, text) {
 function broadcast(code) {
   const room = rooms.get(code);
   if (!room) return;
-  // 不下发内部字段和玩家令牌（令牌泄露会被用来顶号）
-  const { _deleteTimer, _roomHistIndex, ...pub } = room;
+  // 不下发内部字段（下划线开头）和玩家令牌（令牌泄露会被用来顶号）
+  const pub = {};
+  for (const [k, v] of Object.entries(room)) if (!k.startsWith('_')) pub[k] = v;
   pub.players = room.players.map(p => { const { token, ...rest } = p; return rest; });
+  pub.serverNow = Date.now();   // 客户端据此算倒计时（不依赖手机本地时钟）
+  pub.timing = { notice: OFFLINE_NOTICE_MS, autoSkip: AUTO_SKIP_MS, idle: IDLE_SKIP_MS };
   io.to(code).emit('room-update', pub);
 }
 
@@ -290,11 +331,14 @@ function advanceTurn(room) {
   }
   if (next <= room.currentTurn) room.round++;
   room.currentTurn = next;
+  room.turnSeq = (room.turnSeq || 0) + 1;
+  room.turnStartedAt = room.turnActiveAt = Date.now();
 }
 
 function checkGameOver(room) {
   if (!room.started || room.finished) return;
-  const active = room.players.filter(p => !p.bankrupt && !p.disconnected);
+  // 掉线/暂时离开的人仍在局里（回来可以接着玩），只有退学的人出局
+  const active = room.players.filter(p => !p.bankrupt);
   if (active.length <= 1) {
     if (active.length === 1) {
       addLog(room, `🎓 游戏结束！${active[0].name} 顺利毕业，荣获学霸称号！`);
@@ -487,7 +531,8 @@ function checkBankruptcy(room, code) {
 function finalizeGame(room) {
   if (room._finalized || !room.started) return;
   room._finalized = true;
-  const entry = (room.histIndex !== undefined) ? stats.gameHistory[room.histIndex] : null;
+  // 按唯一 id 找记录：gameHistory 满 500 条后会整体前移，用下标会写到别的局上
+  const entry = room._gid ? findLast(stats.gameHistory, g => g.gid === room._gid) : null;
   if (!entry) return;
   entry.endTime = new Date().toISOString();
   entry.durationMs = room.startTime ? Date.now() - room.startTime : 0;
@@ -508,19 +553,146 @@ function finalizeGame(room) {
   saveStats();
 }
 
-const ROOM_KEEP_ALIVE = 15 * 60 * 1000; // 15 minutes
+function findLast(arr, fn) {
+  for (let i = (arr || []).length - 1; i >= 0; i--) if (fn(arr[i])) return arr[i];
+  return null;
+}
+function newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
-// Mark players whose socket no longer exists as disconnected (repairs ghost
-// entries left behind by missed disconnect events)
-function sweepGhosts(room) {
+// ===== 断线容忍：掉线不等于离开 =====
+// 玩家状态：
+//   offline       连接断了（多半只是闪断，客户端正在自动重连）。轮到他时大家等他，5 秒后显示提示和「跳过」按钮
+//   disconnected  暂时离开：掉线太久 / 掉线时被跳过 / 主动点了离开。轮到他时直接跳过，连回来自动恢复
+// 所有时长都可以用环境变量改（测试里调小）
+const envMs = (name, def) => { const v = Number(process.env[name]); return Number.isFinite(v) && v > 0 ? v : def; };
+const OFFLINE_NOTICE_MS = envMs('OFFLINE_NOTICE_MS', 5000);       // 掉线 5 秒后才提示其他人（闪断别人看不到）
+const AUTO_SKIP_MS      = envMs('AUTO_SKIP_MS', 30000);           // 提示出现后再等 30 秒，自动跳过他这回合
+const IDLE_SKIP_MS      = envMs('IDLE_SKIP_MS', 60000);           // 在线但 60 秒没操作，其他人也可以跳过他
+const AWAY_MS           = envMs('AWAY_MS', 2 * 60000);            // 对局中掉线超过 2 分钟算暂时离开
+const LOBBY_AWAY_MS     = envMs('LOBBY_AWAY_MS', 15000);          // 等待开局时掉线超过 15 秒就不再挡着大家开局
+const KEEP_STARTED_MS   = envMs('KEEP_STARTED_MS', 30 * 60000);   // 进行中的对局：全员离线后保留 30 分钟
+const KEEP_IDLE_MS      = envMs('KEEP_IDLE_MS', 15 * 60000);      // 没开局 / 已结束：全员离线后保留 15 分钟
+
+// 从什么时候开始等这位玩家：他掉线的时刻和轮到他的时刻，取较晚的
+function waitStart(room, p) { return Math.max(p.offlineSince || 0, room.turnStartedAt || 0); }
+
+// 当前回合能不能被别人跳过：掉线满 5 秒，或在线但 60 秒没操作
+function canSkip(room, now) {
+  const cur = room.players[room.currentTurn];
+  if (!cur || cur.bankrupt) return false;
+  if (cur.offline) return now - waitStart(room, cur) >= OFFLINE_NOTICE_MS;
+  return now - (room.turnActiveAt || room.turnStartedAt || now) >= IDLE_SKIP_MS;
+}
+
+// 除了当前玩家，还有没有能接着玩的人
+function hasOtherActive(room) {
+  return room.players.some((p, i) => i !== room.currentTurn && !p.bankrupt && !p.disconnected);
+}
+// 有没有别人在线等着（大家都掉线时不自动跳过，免得回来时每人都莫名丢一回合）
+function someoneWaiting(room) {
+  return room.players.some((p, i) => i !== room.currentTurn && !p.bankrupt && !p.offline);
+}
+
+function skipTurn(room, byName) {
+  const cur = room.players[room.currentTurn];
+  if (!cur) return;
+  const wasOffline = !!cur.offline;
+  if (wasOffline) cur.disconnected = true;   // 掉线中被跳过：之后轮到他直接跳过，连回来自动恢复
+  if (byName) addLog(room, `⏭️ ${byName} 跳过了 ${cur.name} 的回合（${wasOffline ? '掉线中' : '长时间没操作'}）`);
+  else addLog(room, `⏭️ ${cur.name} 掉线没回来，自动跳过本回合`);
+  advanceTurn(room);
+}
+
+// 当前玩家有操作（掷骰、买地等）时刷新"最近操作时间"，用于判断是否长时间没操作
+function touchTurn(room, socket) {
+  if (room && room.started && room.players[room.currentTurn]?.id === socket.id) room.turnActiveAt = Date.now();
+}
+
+// 座位还标着在线、但对应的连接已经不存在：补记为掉线（防止漏掉 disconnect 事件留下"幽灵"）
+function markGhosts(room, now = Date.now()) {
   let changed = false;
   for (const p of room.players) {
-    if (!p.disconnected && !io.sockets.sockets.has(p.id)) {
-      p.disconnected = true;
-      changed = true;
-    }
+    if (!p.offline && !io.sockets.sockets.has(p.id)) { p.offline = true; p.offlineSince = now; changed = true; }
   }
   return changed;
+}
+
+// 把一个连接接到某个座位上（重连、换页面、按名字找回都走这里）
+function attachSocket(room, code, p, socket) {
+  const wasAway = !!p.disconnected;
+  const oldId = p.id;
+  if (oldId !== socket.id) {
+    socketRoom.delete(oldId);
+    leaveVoice(room, code, oldId);
+    const old = io.sockets.sockets.get(oldId);
+    if (old) { old.emit('seat-taken', { code }); old.leave(code); }   // 旧页面还开着：告诉它这局已在别处继续
+    p.id = socket.id;
+  }
+  p.offline = false;
+  p.offlineSince = null;
+  p.disconnected = false;
+  socketRoom.set(socket.id, code);
+  socket.join(code);
+  room._emptySince = null;
+  if (wasAway) addLog(room, `${p.name} 回来了`);
+}
+
+// 连接断开（不是主动离开）：只标记掉线，不跳回合、不写日志
+function markOffline(socket) {
+  const code = socketRoom.get(socket.id);
+  if (!code) return null;
+  socketRoom.delete(socket.id);
+  const room = rooms.get(code);
+  if (!room) return null;
+  leaveVoice(room, code, socket.id);
+  const p = room.players.find(pl => pl.id === socket.id);
+  if (!p) return null;
+  if (!p.offline) { p.offline = true; p.offlineSince = Date.now(); }
+  broadcast(code);
+  return { code, name: p.name };
+}
+
+// 结算投票：所有在局里、没退学、没暂时离开的人都同意就结算
+function checkEndVote(room) {
+  if (!room.endVote || room.finished) return false;
+  const activePlayers = room.players.filter(pl => !pl.bankrupt && !pl.disconnected);
+  const allConfirmed = activePlayers.every(pl => room.endVote.voters.includes(room.players.indexOf(pl)));
+  if (!allConfirmed) return false;
+  const results = room.players.map((pl, i) => {
+    if (pl.bankrupt) return { name: pl.name, money: 0, propValue: pl.lastPropertyValue || 0, total: 0, bankrupt: true, props: pl.lastPropertyDetails || [] };
+    let propValue = 0;
+    const props = [];
+    for (const [sid, prop] of Object.entries(room.properties)) {
+      if (prop.owner === i) {
+        const val = (PRICES[+sid] || 0) + (BUILDING_COSTS[+sid] || 0) * prop.level;
+        propValue += val;
+        props.push({ name: NAMES[+sid], level: prop.level, value: val });
+      }
+    }
+    return { name: pl.name, money: pl.money, propValue, total: pl.money + propValue, bankrupt: false, props };
+  });
+  const active = results.filter(r => !r.bankrupt);
+  active.sort((a, b) => b.total - a.total);
+  const winner = active.length > 0 ? active[0] : null;
+  addLog(room, '📊 游戏结算！');
+  active.forEach((r, i) => addLog(room, `${i+1}. ${r.name}：总资产 ¥${r.total.toLocaleString()}（现金 ¥${r.money.toLocaleString()} + 地产 ¥${r.propValue.toLocaleString()}）`));
+  if (winner) {
+    room.winner = winner.name;
+    addLog(room, `🎓 ${winner.name} 以总资产 ¥${winner.total.toLocaleString()} 顺利毕业，荣获学霸称号！`);
+  }
+  room.finished = true;
+  room.settled = true;
+  room.settlement = results;
+  room.endVote = null;
+  finalizeGame(room);
+  return true;
+}
+
+// 开局前：在场（没暂时离开）的人都准备好了、且至少 2 人，就自动开局
+function readyToStart(room) {
+  if (room.started) return false;
+  const present = room.players.filter(pl => !pl.disconnected);
+  return present.length >= 2 && present.every(pl => pl.ready);
 }
 
 // 将某个 socket 移出语音成员列表并通知房间内其他人
@@ -533,38 +705,65 @@ function leaveVoice(room, code, socketId) {
   }
 }
 
+// 主动离开（点了"离开"、或去建/进别的房间）：座位标为暂时离开，轮到他时直接跳过
 function leaveRoom(socket) {
   const code = socketRoom.get(socket.id);
   if (!code) return;
+  socketRoom.delete(socket.id);
+  socket.leave(code);
   const room = rooms.get(code);
-  if (!room) { socketRoom.delete(socket.id); return; }
+  if (!room) return;
 
   leaveVoice(room, code, socket.id);
-  socket.leave(code);
-  socketRoom.delete(socket.id);
   const idx = room.players.findIndex(p => p.id === socket.id);
   if (idx === -1) return;
-  const name = room.players[idx].name;
+  const p = room.players[idx];
+  p.offline = true;
+  p.offlineSince = p.offlineSince || Date.now();
+  p.disconnected = true;
+  if (room.started && !room.finished && room.currentTurn === idx) advanceTurn(room);
 
-  room.players[idx].disconnected = true;
-  if (room.started && room.currentTurn === idx) advanceTurn(room);
-
-  addLog(room, `${name} 离开了房间`);
-  if (room.players.every(p => p.disconnected)) {
-    // All gone — schedule deletion after grace period
-    if (room._deleteTimer) clearTimeout(room._deleteTimer);
-    room._deleteTimer = setTimeout(() => {
-      if (rooms.has(code) && rooms.get(code).players.every(p => p.disconnected)) {
-        finalizeGame(room);
-        rooms.delete(code);
-      }
-    }, ROOM_KEEP_ALIVE);
-  } else {
-    broadcast(code);
-  }
+  addLog(room, `${p.name} 离开了房间`);
+  broadcast(code);
+  checkEndVote(room) && broadcast(code);
+  if (readyToStart(room)) startGame(room, code);
 }
 
 // ===== Socket Events =====
+function startGame(room, code) {
+  if (room.started) return;
+  // 暂时离开（掉线太久 / 主动离开）的人不进这局；刚闪断、还在缓冲期里的人照样带上
+  room.players = room.players.filter(p => !p.disconnected);
+  room.players.forEach((p, i) => p.color = COLORS[i % COLORS.length]);
+  if (room.players.length < 2) return;
+  room.started = true;
+  room.startTime = Date.now();
+  room.currentTurn = 0;
+  room.turnSeq = 1;
+  room.turnStartedAt = room.turnActiveAt = Date.now();
+  stats.totalGames++;
+  stats.gameStartLog.push(Date.now());
+  const rh = room._rid ? findLast(stats.roomHistory, r => r.rid === room._rid) : null;
+  if (rh) rh.gameStarted = true;
+  room._gid = newId();
+  const histEntry = {
+    gid: room._gid, code, startTime: new Date().toISOString(),
+    playerNames: room.players.map(p => p.name),
+    playerRoles: room.players.map(p => ({ name: p.name, role: p.role, roleName: ROLES[p.role]?.name || '新生', roleEmoji: ROLES[p.role]?.emoji || '🎒' })),
+  };
+  stats.gameHistory.push(histEntry);
+  if (stats.gameHistory.length > 500) stats.gameHistory = stats.gameHistory.slice(-500);
+  saveStats();
+  // Apply role starting money adjustments
+  room.players.forEach(p => {
+    const r = ROLES[p.role];
+    if (r && r.startMoney) p.money += r.startMoney;
+  });
+  const roleInfo = room.players.map(p => `${ROLES[p.role]?.emoji||'🎒'} ${p.name}(${ROLES[p.role]?.name||'新生'})`).join('、');
+  addLog(room, `游戏开始！${roleInfo}`);
+  broadcast(code);
+}
+
 io.on('connection', (socket) => {
   stats.totalConnections++;
   if (!stats.connectionLog) stats.connectionLog = [];
@@ -572,13 +771,26 @@ io.on('connection', (socket) => {
   if (!stats.gameStartLog) stats.gameStartLog = [];
   stats.connectionLog.push(Date.now());
 
+  const connectedAt = Date.now();
+  const hdrs = (socket.handshake && socket.handshake.headers) || {};
+  netlog({ ev: 'conn', sid: socket.id, rec: !!socket.recovered, tr: socket.conn?.transport?.name, edge: hdrs['fly-region'], ua: uaFamily(hdrs['user-agent']) });
+
+  // 闪断后恢复了同一个连接：立刻接回座位（客户端断线期间缓存的操作会在 join-room 之前到达）
+  if (socket.recovered) {
+    for (const [code, room] of rooms) {
+      const p = room.players.find(pl => pl.id === socket.id);
+      if (p) { attachSocket(room, code, p, socket); broadcast(code); break; }
+    }
+  }
+
   // create-room: max 5 per 30s
-  guarded(socket, 'create-room', 5, 30000, ({ name, token, settings }) => {
+  guarded(socket, 'create-room', 5, 30000, (payload) => {
+    const { name, token, settings } = payload || {};
     leaveRoom(socket);
     const code = genCode();
     const room = {
       code, hostId: socket.id,
-      players: [{ id: socket.id, token: token||null, name: name||'房主', color: COLORS[0], money: 10000, position: 0, inJail: false, jailTurns: 0, bankrupt: false, disconnected: false, role: 'freshman', ready: false }],
+      players: [{ id: socket.id, token: token||null, name: name||'房主', color: COLORS[0], money: 10000, position: 0, inJail: false, jailTurns: 0, bankrupt: false, disconnected: false, offline: false, offlineSince: null, role: 'freshman', ready: false }],
       started: false, currentTurn: 0, round: 1, properties: {}, log: [], lastDice: [0,0], voice: [],
       settings: normalizeSettings(settings),
     };
@@ -589,93 +801,82 @@ io.on('connection', (socket) => {
     stats.roomLog.push(Date.now());
     // Record room history
     if (!stats.roomHistory) stats.roomHistory = [];
-    const rh = { code, createTime: new Date().toISOString(), playerNames: [name||'房主'], gameStarted: false };
+    const rh = { rid: newId(), code, createTime: new Date().toISOString(), playerNames: [name||'房主'], gameStarted: false };
     stats.roomHistory.push(rh);
     if (stats.roomHistory.length > 500) stats.roomHistory = stats.roomHistory.slice(-500);
-    room._roomHistIndex = stats.roomHistory.length - 1;
+    room._rid = rh.rid;
     addLog(room, `${name} 创建了房间`);
     broadcast(code);
   });
 
   // join-room: max 5 per 15s
-  guarded(socket, 'join-room', 5, 15000, ({ code, name, token }) => {
-    code = (code||'').toUpperCase().trim();
+  // 参数：code、name、token（这个页面的身份令牌），以及
+  //   prevToken  新开的页面在本机记录里找到的上一个令牌（同一浏览器换了标签页 / 微信里重新点开链接）
+  //   takeover   旧页面还连着时，用户确认"在这里继续"
+  //   auto       页面自动发出的重进请求：失败时回 rejoin-failed，由页面安静地回到大厅，而不是弹窗
+  guarded(socket, 'join-room', 5, 15000, (payload) => {
+    const { token, prevToken, takeover, auto } = payload || {};
+    const code = String((payload && payload.code) || '').toUpperCase().trim();
+    const name = typeof (payload && payload.name) === 'string' ? payload.name : '';
+    const fail = (reason, msg) => auto ? socket.emit('rejoin-failed', { reason, message: msg }) : socket.emit('error-msg', msg);
     const room = rooms.get(code);
-    if (!room) return socket.emit('error-msg', '房间不存在，请检查代码');
+    if (!room) return fail('room-gone', '房间不存在，请检查代码');
 
-    // This socket already has an entry in this room (connectionStateRecovery keeps
-    // the same socket.id across brief disconnects, and the page re-sends join-room
-    // on every reconnect) — just re-attach, never create a second entry.
+    // 1) 这个连接本来就坐在这个房间里（闪断后恢复了同一个连接 / 重复发送）
     const own = room.players.find(p => p.id === socket.id);
-    if (own) {
-      const wasDisconnected = own.disconnected;
-      own.disconnected = false;
-      socketRoom.set(socket.id, code);
-      socket.join(code);
-      if (room._deleteTimer) { clearTimeout(room._deleteTimer); room._deleteTimer = null; }
-      if (wasDisconnected) addLog(room, `${own.name} 重新连接`);
-      broadcast(code);
-      return;
-    }
+    if (own) { attachSocket(room, code, own, socket); broadcast(code); return; }
 
-    leaveRoom(socket); // joining from another room / stale mapping
+    leaveRoom(socket); // 从别的房间过来：先离开那边
+    markGhosts(room);
 
-    // Entries still marked online but whose socket is gone are ghosts — mark them
-    // disconnected so they can be reclaimed by name below and hidden from the lobby.
-    sweepGhosts(room);
-
-    // Reconnect: prefer token match (same browser tab, works even if the old
-    // socket hasn't timed out yet, e.g. after an unclean page refresh), then
-    // fall back to name match among disconnected players.
-    let disc = -1;
-    if (token) disc = room.players.findIndex(p => p.token === token);
-    if (disc === -1) disc = room.players.findIndex(p => p.name === name && p.disconnected);
-    if (disc !== -1) {
-      const oldSocketId = room.players[disc].id;
-      room.players[disc].id = socket.id;
-      room.players[disc].disconnected = false;
-      if (oldSocketId !== socket.id) {
-        socketRoom.delete(oldSocketId);
-        leaveVoice(room, code, oldSocketId);
-        const oldSocket = io.sockets.sockets.get(oldSocketId);
-        if (oldSocket) oldSocket.leave(code);
+    // 2) 同一个页面重连：令牌和名字都对上
+    let seat = token ? room.players.find(p => p.token === token && p.name === name) : null;
+    // 3) 同一个浏览器新开的页面：用本机记录里的上一个令牌找回；旧页面还连着就先问用户
+    if (!seat && prevToken) {
+      const prev = room.players.find(p => p.token === prevToken && p.name === name);
+      if (prev) {
+        if (!prev.offline && !takeover) return socket.emit('resume-conflict', { code, name });
+        seat = prev;
       }
-      socketRoom.set(socket.id, code);
-      socket.join(code);
-      if (room._deleteTimer) { clearTimeout(room._deleteTimer); room._deleteTimer = null; }
-      addLog(room, `${name} 重新连接`);
+    }
+    // 4) 按名字找回：只能接回掉线中 / 暂时离开的座位，在线的人不会被同名顶掉
+    if (!seat) {
+      const byName = room.players.find(p => p.name === name);
+      if (byName) {
+        if (byName.offline || byName.disconnected) seat = byName;
+        else return fail('name-taken', '该昵称已被房间内玩家使用。如果是你换了手机或页面，等半分钟再试');
+      }
+    }
+    if (seat) {
+      if (token) seat.token = token;   // 以后以最新的页面为准
+      attachSocket(room, code, seat, socket);
       broadcast(code);
       return;
     }
 
-    // Name already taken by a live player — reject instead of hijacking their slot
-    if (room.players.some(p => p.name === name && !p.disconnected)) {
-      return socket.emit('error-msg', '该昵称已被房间内玩家使用，请换一个名字');
-    }
-
-    if (room.started) return socket.emit('error-msg', '游戏已开始，无法加入');
+    if (room.started) return fail('started', '游戏已开始，无法加入');
     const activePlayers = room.players.filter(p => !p.disconnected).length;
-    if (activePlayers >= 6) return socket.emit('error-msg', '房间已满（最多6人）');
+    if (activePlayers >= 6) return fail('full', '房间已满（最多6人）');
 
     room.players.push({
       id: socket.id, token: token||null, name: name||`玩家${room.players.length+1}`, color: COLORS[room.players.length % COLORS.length],
-      money: 10000, position: 0, inJail: false, jailTurns: 0, bankrupt: false, disconnected: false, role: 'freshman', ready: false,
+      money: 10000, position: 0, inJail: false, jailTurns: 0, bankrupt: false, disconnected: false, offline: false, offlineSince: null, role: 'freshman', ready: false,
     });
     socketRoom.set(socket.id, code);
     socket.join(code);
-    if (room._deleteTimer) { clearTimeout(room._deleteTimer); room._deleteTimer = null; }
+    room._emptySince = null;
     stats.roomLog.push(Date.now());
     // Update room history
-    if (room._roomHistIndex !== undefined && stats.roomHistory[room._roomHistIndex]) {
-      stats.roomHistory[room._roomHistIndex].playerNames.push(name||`玩家${room.players.length}`);
-    }
+    const rh = room._rid ? findLast(stats.roomHistory, r => r.rid === room._rid) : null;
+    if (rh) rh.playerNames.push(name||`玩家${room.players.length}`);
     addLog(room, `${name} 加入了房间`);
     broadcast(code);
   });
 
   guarded(socket, 'leave-room', 5, 10000, () => leaveRoom(socket));
 
-  socket.on('select-role', ({ role }) => {
+  guarded(socket, 'select-role', 10, 5000, (payload) => {
+    const role = payload && payload.role;
     if (!role || !ROLES[role]) return;
     const code = getCode(socket);
     const room = rooms.get(code);
@@ -707,48 +908,12 @@ io.on('connection', (socket) => {
     const p = room.players.find(pl => pl.id === socket.id);
     if (!p) return;
     p.ready = !p.ready;
-    sweepGhosts(room); // 幽灵玩家不应阻止开局
+    markGhosts(room);
     addLog(room, `${p.name} ${p.ready ? '已准备' : '取消准备'}`);
     broadcast(code);
-    // Auto-start when all active players ready and >= 2
-    const active = room.players.filter(pl => !pl.disconnected);
-    if (active.length >= 2 && active.every(pl => pl.ready)) {
-      startGame(room, code);
-    }
+    // 在场的人都准备好了（≥2 人）就自动开局；刚闪断、已准备的人也会被带上
+    if (readyToStart(room)) startGame(room, code);
   });
-
-  function startGame(room, code) {
-    if (room.started) return;
-    // Remove disconnected players before starting
-    room.players = room.players.filter(p => !p.disconnected);
-    room.players.forEach((p, i) => p.color = COLORS[i % COLORS.length]);
-    if (room.players.length < 2) return;
-    room.started = true;
-    room.startTime = Date.now();
-    stats.totalGames++;
-    stats.gameStartLog.push(Date.now());
-    // Mark room history as game started
-    if (room._roomHistIndex !== undefined && stats.roomHistory[room._roomHistIndex]) {
-      stats.roomHistory[room._roomHistIndex].gameStarted = true;
-    }
-    const histEntry = {
-      code, startTime: new Date().toISOString(),
-      playerNames: room.players.map(p => p.name),
-      playerRoles: room.players.map(p => ({ name: p.name, role: p.role, roleName: ROLES[p.role]?.name || '新生', roleEmoji: ROLES[p.role]?.emoji || '🎒' })),
-    };
-    stats.gameHistory.push(histEntry);
-    if (stats.gameHistory.length > 500) stats.gameHistory = stats.gameHistory.slice(-500);
-    room.histIndex = stats.gameHistory.length - 1;
-    saveStats();
-    // Apply role starting money adjustments
-    room.players.forEach(p => {
-      const r = ROLES[p.role];
-      if (r && r.startMoney) p.money += r.startMoney;
-    });
-    const roleInfo = room.players.map(p => `${ROLES[p.role]?.emoji||'🎒'} ${p.name}(${ROLES[p.role]?.name||'新生'})`).join('、');
-    addLog(room, `游戏开始！${roleInfo}`);
-    broadcast(code);
-  }
 
   // jail-action: pay bail or roll for doubles
   guarded(socket, 'jail-action', 5, 5000, ({ action }) => {
@@ -757,6 +922,7 @@ io.on('connection', (socket) => {
     if (!room || !room.started) return;
     const ci = room.currentTurn;
     if (room.players[ci].id !== socket.id) return;
+    touchTurn(room, socket);
     const p = room.players[ci];
     if (!p.inJail) return;
     if (p.inDebt) return socket.emit('error-msg', '资金为负，请先卖出地产还债');
@@ -816,6 +982,7 @@ io.on('connection', (socket) => {
     if (!room || !room.started) return;
     const ci = room.currentTurn;
     if (room.players[ci].id !== socket.id) return;
+    touchTurn(room, socket);
     if (room.rolled) return;
     if (room.players[ci].inJail) return;
     if (room.players[ci].inDebt) return socket.emit('error-msg', '资金为负，请先卖出地产还债');
@@ -869,6 +1036,7 @@ io.on('connection', (socket) => {
     if (!room || !room.started) return;
     const basePrice = PRICES[spaceId];
     if (basePrice === undefined || room.properties[spaceId]) return;
+    touchTurn(room, socket);
     const pi = playerIndex ?? room.currentTurn;
     if (pi < 0 || pi >= room.players.length) return;
     const role = room.players[pi].role;
@@ -887,6 +1055,7 @@ io.on('connection', (socket) => {
     if (!room || !room.started || room.finished) return;
     const ci = room.currentTurn;
     if (room.players[ci].id !== socket.id) return;
+    touchTurn(room, socket);
     const prop = room.properties[spaceId];
     if (!prop || prop.owner !== ci || prop.level >= 5) return;
     const baseCost = BUILDING_COSTS[spaceId];
@@ -907,6 +1076,7 @@ io.on('connection', (socket) => {
     if (room.settings?.sellProperty === false) return socket.emit('error-msg', '本局设置不允许卖地产');
     const pi = room.players.findIndex(pl => pl.id === socket.id);
     if (pi === -1) return;
+    touchTurn(room, socket);
     const p = room.players[pi];
     const prop = room.properties[spaceId];
     if (!prop || prop.owner !== pi || p.bankrupt) return;
@@ -923,6 +1093,7 @@ io.on('connection', (socket) => {
     const room = rooms.get(code);
     if (!room || !room.started) return;
     if (fromIndex===toIndex || !amount || amount<=0) return;
+    touchTurn(room, socket);
     if (fromIndex<0||fromIndex>=room.players.length||toIndex<0||toIndex>=room.players.length) return;
     room.players[fromIndex].money -= amount;
     room.players[toIndex].money += amount;
@@ -936,6 +1107,7 @@ io.on('connection', (socket) => {
     const room = rooms.get(code);
     if (!room || !room.started) return;
     if (playerIndex<0||playerIndex>=room.players.length) return;
+    touchTurn(room, socket);
     room.players[playerIndex].money += amount;
     addLog(room, `${room.players[playerIndex].name} ${note||(amount>0?'收入':'支出')} ¥${Math.abs(amount).toLocaleString()}`);
     checkBankruptcy(room, code);
@@ -946,6 +1118,7 @@ io.on('connection', (socket) => {
     const code = getCode(socket);
     const room = rooms.get(code);
     if (!room || !room.started) return;
+    touchTurn(room, socket);
     const p = room.players[room.currentTurn];
     switch(action) {
       case 'passgo': { const gm=p.role==='alumni'?2000:1500; p.money+=gm; addLog(room,`${p.name} 起点奖励 +¥${gm.toLocaleString()}`); break; }
@@ -985,43 +1158,23 @@ io.on('connection', (socket) => {
       addLog(room, `${p.name} 同意结算`);
     }
 
-    // Check if all active players have confirmed
-    const activePlayers = room.players.filter((pl) => !pl.bankrupt && !pl.disconnected);
-    const allConfirmed = activePlayers.every((pl) => {
-      const idx = room.players.indexOf(pl);
-      return room.endVote.voters.includes(idx);
-    });
+    // 在局里的人（掉线中的也算，暂时离开的不算）都同意了就结算
+    checkEndVote(room);
+    broadcast(code);
+  });
 
-    if (allConfirmed) {
-      // Settle the game
-      const results = room.players.map((pl, i) => {
-        if (pl.bankrupt) return { name: pl.name, money: 0, propValue: pl.lastPropertyValue || 0, total: 0, bankrupt: true, props: pl.lastPropertyDetails || [] };
-        let propValue = 0;
-        const props = [];
-        for (const [sid, prop] of Object.entries(room.properties)) {
-          if (prop.owner === i) {
-            const val = (PRICES[+sid] || 0) + (BUILDING_COSTS[+sid] || 0) * prop.level;
-            propValue += val;
-            props.push({ name: NAMES[+sid], level: prop.level, value: val });
-          }
-        }
-        return { name: pl.name, money: pl.money, propValue, total: pl.money + propValue, bankrupt: false, props };
-      });
-      const active = results.filter(r => !r.bankrupt);
-      active.sort((a, b) => b.total - a.total);
-      const winner = active.length > 0 ? active[0] : null;
-      addLog(room, '📊 游戏结算！');
-      active.forEach((r, i) => addLog(room, `${i+1}. ${r.name}：总资产 ¥${r.total.toLocaleString()}（现金 ¥${r.money.toLocaleString()} + 地产 ¥${r.propValue.toLocaleString()}）`));
-      if (winner) {
-        room.winner = winner.name;
-        addLog(room, `🎓 ${winner.name} 以总资产 ¥${winner.total.toLocaleString()} 顺利毕业，荣获学霸称号！`);
-      }
-      room.finished = true;
-      room.settled = true;
-      room.settlement = results;
-      room.endVote = null;
-      finalizeGame(room);
-    }
+  // 跳过当前玩家的回合：他掉线满 5 秒，或在线但 60 秒没操作时，其他任何人都可以点
+  guarded(socket, 'skip-turn', 5, 5000, (payload) => {
+    const code = getCode(socket);
+    const room = rooms.get(code);
+    if (!room || !room.started || room.finished) return;
+    const me = room.players.find(p => p.id === socket.id);
+    if (!me || me.bankrupt) return;
+    if (payload && payload.seq !== undefined && payload.seq !== room.turnSeq) return;   // 回合已经变了（比如别人刚点过）
+    const cur = room.players[room.currentTurn];
+    if (!cur || cur === me) return;
+    if (!canSkip(room, Date.now())) return socket.emit('error-msg', '他刚刚还在操作，再等一下');
+    skipTurn(room, me.name);
     broadcast(code);
   });
 
@@ -1066,15 +1219,48 @@ io.on('connection', (socket) => {
     io.to(code).emit('chat-msg', { from: player?.name||'???', text, color: player?.color||'#999' });
   });
 
-  socket.on('disconnect', () => leaveRoom(socket));
+  // 连接断开（网络闪断、锁屏、关页面都会走这里）：只标记掉线，等他回来
+  socket.on('disconnect', safe('disconnect', (reason) => {
+    const info = markOffline(socket);
+    netlog({ ev: 'disc', sid: socket.id, reason, sec: Math.round((Date.now() - connectedAt) / 1000), room: info && info.code, name: info && info.name });
+  }));
 });
 
-// Cleanup stale rooms every 10 min
-setInterval(() => {
+// 每秒检查所有房间：掉线太久的标为暂时离开、该自动跳过的回合跳过、全员离线够久的房间删除
+setInterval(safe('tick', () => {
+  const now = Date.now();
   for (const [code, room] of rooms) {
-    if (room.players.length === 0 || room.players.every(p => p.disconnected)) { finalizeGame(room); rooms.delete(code); }
+    let changed = markGhosts(room, now);
+    const awayAfter = room.started ? AWAY_MS : LOBBY_AWAY_MS;
+    let someoneLeft = false;
+    for (const p of room.players) {
+      if (p.offline && !p.disconnected && now - p.offlineSince >= awayAfter) {
+        p.disconnected = true; changed = true; someoneLeft = true;
+        if (room.started && !room.finished && !p.bankrupt) addLog(room, `📴 ${p.name} 掉线超过 ${Math.round(AWAY_MS / 60000)} 分钟，先跳过他的回合（回来后可以接着玩）`);
+      }
+    }
+    if (room.started && !room.finished) {
+      const cur = room.players[room.currentTurn];
+      if (cur && (cur.bankrupt || cur.disconnected) && hasOtherActive(room)) {
+        advanceTurn(room); changed = true;
+      } else if (cur && cur.offline && someoneWaiting(room) && now - waitStart(room, cur) >= OFFLINE_NOTICE_MS + AUTO_SKIP_MS) {
+        skipTurn(room, null); changed = true;
+      }
+      if (someoneLeft && checkEndVote(room)) changed = true;
+    } else if (!room.started && someoneLeft && readyToStart(room)) {
+      startGame(room, code);   // 剩下的人都准备好了：不用再等掉线的人
+    }
+    // 全员离线：进行中的对局保留 30 分钟，其他保留 15 分钟，期间有人回来就继续
+    const empty = room.players.length === 0 || room.players.every(p => p.offline);
+    if (!empty) room._emptySince = null;
+    else {
+      if (!room._emptySince) room._emptySince = now;
+      const keep = (room.started && !room.finished) ? KEEP_STARTED_MS : KEEP_IDLE_MS;
+      if (now - room._emptySince >= keep) { finalizeGame(room); rooms.delete(code); continue; }
+    }
+    if (changed) broadcast(code);
   }
-}, 600000);
+}), 1000);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {

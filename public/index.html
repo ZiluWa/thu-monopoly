@@ -217,8 +217,20 @@
     .modal-btns .mc{background:#eee;color:#666}
     .modal-btns .mo{background:var(--purple);color:#fff}
 
+    /* ===== 网络状态 ===== */
+    .net-banner{position:fixed;top:0;left:0;right:0;z-index:400;background:#e67e22;color:#fff;text-align:center;font-size:13px;font-weight:600;padding:8px 12px;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+    .wait-bar{position:fixed;left:12px;right:76px;bottom:16px;z-index:150;background:#fff;border:2px solid #e67e22;border-radius:12px;padding:10px 12px;box-shadow:0 6px 20px rgba(0,0,0,.18);display:flex;align-items:center;gap:10px;max-width:520px}
+    .wait-bar .wb-info{flex:1;min-width:0}
+    .wait-bar .wb-text{font-size:13px;font-weight:700;color:#333;line-height:1.35}
+    .wait-bar .wb-sub{font-size:11px;color:#e67e22;margin-top:2px}
+    .wait-bar .wb-btn{flex-shrink:0;background:#e67e22;color:#fff;border:none;border-radius:8px;padding:9px 12px;font-size:13px;font-weight:700}
+    .wait-bar .wb-btn:active{opacity:.85}
+    .net-tag{font-size:10px;font-weight:600;color:#d35400;background:#fdf2e9;border-radius:6px;padding:1px 6px;margin-left:4px;white-space:nowrap}
+    .player-card.away{opacity:.6}
+
     /* ===== PRINT ===== */
     @media print{
+      .net-banner,.wait-bar{display:none!important}
       body>*{display:none!important}
       #view-game{display:block!important}
       .topbar,.controls,.chat-toggle,.chat-panel,.voice-toggle,.mute-toggle,.dropdown,.game-footer{display:none!important}
@@ -235,6 +247,11 @@
   </style>
 </head>
 <body>
+
+<!-- 自己断网时的顶部提示 -->
+<div id="netBanner" class="net-banner" style="display:none"></div>
+<!-- 轮到的人掉线 / 长时间没操作时，给其他人看的提示和「跳过」按钮 -->
+<div id="waitBar" class="wait-bar" style="display:none"><div class="wb-info"><div class="wb-text" id="wbText"></div><div class="wb-sub" id="wbSub"></div></div><button class="wb-btn" onclick="emitSkip()">跳过他这回合</button></div>
 
 <!-- ==================== LOBBY ==================== -->
 <div id="view-lobby" class="lobby">
@@ -494,47 +511,108 @@ const socket = io({
   reconnectionDelayMax: 5000,
   timeout: 20000,
   transports: ['websocket', 'polling'],
+  tryAllTransports: true,   // WebSocket 连不上时退回普通 HTTP 轮询（socket.io 4.8 起要显式打开）
 });
 let room = null, myId = null, animating = false, chatOpen = false, unread = 0, menuOpen = false, prevTurn = -1, currentView = 'lobby';
-let savedRoomCode = sessionStorage.getItem('roomCode') || null;
-let savedMyName = sessionStorage.getItem('myName') || null;
+let clockOffset = 0;   // 服务器时间 - 本机时间，倒计时按服务器时间算
+function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// 本地存储在隐私模式等情况下可能直接抛错，统一包一层
+function storage(name) {
+  let s = null; try { s = window[name]; } catch (e) {}
+  return {
+    get(k) { try { return s ? s.getItem(k) : null; } catch (e) { return null; } },
+    set(k, v) { try { if (s) s.setItem(k, v); } catch (e) {} },
+    del(k) { try { if (s) s.removeItem(k); } catch (e) {} },
+  };
+}
+const ss = storage('sessionStorage'), ls = storage('localStorage');
+
 // 每个标签页一个随机身份令牌：刷新/重连后凭它找回自己的座位，也防止别人用同名顶号
-let playerToken = sessionStorage.getItem('playerToken');
+let savedRoomCode = ss.get('roomCode') || null;
+let savedMyName = ss.get('myName') || null;
+let playerToken = ss.get('playerToken');
 if (!playerToken) {
   playerToken = Math.random().toString(36).slice(2) + Date.now().toString(36);
-  sessionStorage.setItem('playerToken', playerToken);
+  ss.set('playerToken', playerToken);
 }
 
-function saveSession() {
-  if (savedRoomCode) sessionStorage.setItem('roomCode', savedRoomCode);
-  if (savedMyName) sessionStorage.setItem('myName', savedMyName);
+// 本机最近一次坐过的座位（localStorage）：微信里重新点开链接、新开标签页时，凭它自动回到原座位
+const LAST_SEAT_KEY = 'monopolyLastSeat', LAST_SEAT_TTL = 6 * 3600 * 1000;
+function readLastSeat() {
+  try {
+    const v = JSON.parse(ls.get(LAST_SEAT_KEY) || 'null');
+    return v && v.code && v.name && v.token && Date.now() - (v.at || 0) < LAST_SEAT_TTL ? v : null;
+  } catch (e) { return null; }
 }
-function clearSession() {
+let resumeSeat = savedRoomCode ? null : readLastSeat();   // 这个页面还没有座位时，准备自动接回的座位
+
+function saveSession() {
+  if (savedRoomCode) ss.set('roomCode', savedRoomCode);
+  if (savedMyName) ss.set('myName', savedMyName);
+  if (savedRoomCode && savedMyName) {
+    const cur = readLastSeat();
+    if (!cur || cur.code !== savedRoomCode || cur.name !== savedMyName || cur.token !== playerToken || Date.now() - cur.at > 60000)
+      ls.set(LAST_SEAT_KEY, JSON.stringify({ code: savedRoomCode, name: savedMyName, token: playerToken, at: Date.now() }));
+  }
+}
+// 只清这个页面的记录（座位被别的页面接走时用）
+function clearTabSession() {
   savedRoomCode = null; savedMyName = null;
-  sessionStorage.removeItem('roomCode');
-  sessionStorage.removeItem('myName');
+  ss.del('roomCode'); ss.del('myName');
+}
+// 主动离开 / 房间没了：连同本机记录一起清掉
+function clearSession() {
+  const cur = readLastSeat();
+  if (cur && cur.token === playerToken) ls.del(LAST_SEAT_KEY);
+  clearTabSession();
+}
+// 回到大厅，可选弹一句说明
+function leaveToLobby(msg) {
+  stopVoice(false);
+  room = null; clearSession(); hideModal(); show('lobby');
+  if (msg) showModal(`<h3>回到大厅</h3><p style="margin:10px 0;line-height:1.6">${esc(msg)}</p><div class="modal-btns"><button class="mo" onclick="hideModal()">知道了</button></div>`);
+}
+
+// 自己断网时顶部提示（闪断 1.5 秒内不提示，免得一闪一闪）
+let _netBannerTimer = null, _reconnectTry = 0;
+function updateNetBanner() {
+  const b = document.getElementById('netBanner'); if (!b) return;
+  const inRoom = currentView === 'room' || currentView === 'game';
+  if (socket.connected || !inRoom) { clearTimeout(_netBannerTimer); _netBannerTimer = null; b.style.display = 'none'; return; }
+  b.textContent = `📶 网络断开，正在重连…${_reconnectTry ? `（第 ${_reconnectTry} 次）` : ''}`;
+  if (b.style.display === 'none' && !_netBannerTimer) {
+    _netBannerTimer = setTimeout(() => { _netBannerTimer = null; if (!socket.connected) b.style.display = ''; }, 1500);
+  }
 }
 
 socket.on('connect', () => {
   myId = socket.id;
+  _reconnectTry = 0;
   document.getElementById('connStatus').textContent = '已连接 ✓';
   document.getElementById('connStatus').style.color = '';
+  updateNetBanner();
   if (savedRoomCode && savedMyName) {
-    socket.emit('join-room', { code: savedRoomCode, name: savedMyName, token: playerToken });
+    socket.emit('join-room', { code: savedRoomCode, name: savedMyName, token: playerToken, auto: true });
     // 断线重连后重建语音（socket.id 可能已变化，先清掉旧连接再重新加入）
     if (voiceOn) {
       for (const id of [...voicePeers.keys()]) closePeer(id);
       socket.emit('voice-join');
     }
+  } else if (resumeSeat) {
+    socket.emit('join-room', { code: resumeSeat.code, name: resumeSeat.name, token: playerToken, prevToken: resumeSeat.token, auto: true });
   }
 });
 socket.on('disconnect', () => {
   const cs = document.getElementById('connStatus');
   cs.textContent = '连接断开，重连中...';
   cs.style.color = '#e74c3c';
+  updateNetBanner();
 });
 socket.io.on('reconnect_attempt', (n) => {
+  _reconnectTry = n;
   document.getElementById('connStatus').textContent = `重连中... (第${n}次)`;
+  updateNetBanner();
 });
 socket.io.on('reconnect', () => {
   document.getElementById('connStatus').textContent = '已重连 ✓';
@@ -542,7 +620,101 @@ socket.io.on('reconnect', () => {
 });
 socket.on('error-msg', m => alert(m));
 socket.on('need-sell', () => { showSellModal(); });
-socket.on('room-update', d => { room = d; if (d && d.code) { savedRoomCode = d.code; saveSession(); } reconcileVoice(); if (!animating) refresh(); });
+socket.on('room-update', d => {
+  room = d;
+  if (d && typeof d.serverNow === 'number') clockOffset = d.serverNow - Date.now();
+  if (d && d.code) {
+    if (resumeSeat && resumeSeat.code === d.code) { savedMyName = resumeSeat.name; resumeSeat = null; hideModal(); }
+    savedRoomCode = d.code; saveSession();
+  }
+  reconcileVoice();
+  if (!animating) refresh();
+  renderPresence();
+});
+// 自动重进房间失败（房间没了 / 座位已在别处继续等）：回到大厅并说明原因，不再反复弹窗
+const REJOIN_MSGS = {
+  'room-gone': '这个房间已经不在了（服务器重启过，或者大家都离开太久）。可以重新建一个房间。',
+  'name-taken': '你的座位已经在另一个页面或设备上继续了。',
+  'started': '这局游戏已经开始了，你不在这局里。',
+  'full': '房间已满（最多 6 人）。',
+};
+socket.on('rejoin-failed', (info) => {
+  if (!savedRoomCode && resumeSeat) {           // 新页面自动接回没成功：安静地留在大厅
+    const cur = readLastSeat();
+    if (cur && cur.token === resumeSeat.token) ls.del(LAST_SEAT_KEY);
+    resumeSeat = null;
+    return;
+  }
+  leaveToLobby(REJOIN_MSGS[info && info.reason] || (info && info.message) || '没能回到房间。');
+});
+// 新页面想接回座位，但旧页面还连着：问一下在哪边继续
+socket.on('resume-conflict', (info) => {
+  if (!resumeSeat) return;
+  showModal(`<h3>在这里继续？</h3><p style="margin:10px 0;line-height:1.6">你在另一个页面或设备上正在玩房间 <b>${esc(info && info.code)}</b>（昵称 <b>${esc(info && info.name)}</b>）。</p><p style="font-size:12px;color:#888">在这里继续的话，那边会自动断开。</p><div class="modal-btns"><button class="mc" onclick="declineResume()">不用了</button><button class="mo" onclick="takeoverResume()">在这里继续</button></div>`, true);
+});
+function takeoverResume() {
+  hideModal();
+  if (resumeSeat) socket.emit('join-room', { code: resumeSeat.code, name: resumeSeat.name, token: playerToken, prevToken: resumeSeat.token, takeover: true, auto: true });
+}
+function declineResume() {
+  hideModal();
+  if (resumeSeat) document.getElementById('inp-jcode').value = resumeSeat.code;
+  resumeSeat = null;
+}
+// 这个座位被别的页面接走了
+socket.on('seat-taken', () => {
+  stopVoice(false);
+  room = null; clearTabSession(); hideModal(); show('lobby');
+  showModal(`<h3>已在别处继续</h3><p style="margin:10px 0;line-height:1.6">这局游戏已经在另一个页面或设备上继续了，这个页面不再同步。</p><div class="modal-btns"><button class="mo" onclick="hideModal()">知道了</button></div>`);
+});
+
+// ===== 掉线 / 没操作的提示 =====
+function serverNow() { return Date.now() + clockOffset; }
+function timingOf() { return (room && room.timing) || { notice: 5000, autoSkip: 30000, idle: 60000 }; }
+// 玩家网络状态的小标签：掉线不到 5 秒不显示
+function netTag(p) {
+  if (!p || p.bankrupt) return '';
+  if (p.disconnected) return '📴 暂时离开';
+  if (p.offline && serverNow() - (p.offlineSince || 0) >= timingOf().notice) return '📶 掉线中';
+  return '';
+}
+// 轮到的人掉线满 5 秒（带倒计时，到点自动跳过），或在线但 60 秒没操作：其他人看到提示和「跳过」按钮
+function renderWait() {
+  const bar = document.getElementById('waitBar'); if (!bar) return;
+  let text = '', sub = '';
+  if (room && room.started && !room.finished && currentView === 'game') {
+    const cp = room.players[room.currentTurn];
+    const mi = room.players.findIndex(p => p.id === myId);
+    const me = room.players[mi];
+    if (cp && me && !me.bankrupt && mi !== room.currentTurn) {
+      const t = timingOf(), now = serverNow();
+      if (cp.offline && !cp.disconnected) {
+        const waited = now - Math.max(cp.offlineSince || 0, room.turnStartedAt || 0);
+        if (waited >= t.notice) {
+          const left = Math.ceil((t.notice + t.autoSkip - waited) / 1000);
+          text = `📶 ${cp.name} 掉线了，等他回来…`;
+          sub = left > 0 ? `${left} 秒后自动跳过` : '马上自动跳过';
+        }
+      } else if (!cp.offline) {
+        const idle = now - (room.turnActiveAt || room.turnStartedAt || now);
+        if (idle >= t.idle) { text = `⏳ ${cp.name} ${Math.max(1, Math.floor(idle / 60000))} 分钟没操作了`; sub = '可以等他，也可以跳过'; }
+      }
+    }
+  }
+  if (!text) { bar.style.display = 'none'; return; }
+  document.getElementById('wbText').textContent = text;
+  document.getElementById('wbSub').textContent = sub;
+  bar.style.display = '';
+}
+function renderPresence() {
+  renderWait();
+  document.querySelectorAll('[data-net-pi]').forEach(el => {
+    const t = room ? netTag(room.players[+el.dataset.netPi]) : '';
+    el.textContent = t; el.style.display = t ? '' : 'none';
+  });
+}
+setInterval(renderPresence, 1000);
+function emitSkip() { if (room) socket.emit('skip-turn', { seq: room.turnSeq }); }
 socket.on('dice-rolled', ({ dice, playerIndex, from, to, landed }) => diceAnim(dice, playerIndex, from, to, landed));
 let _droppedPending = false;
 let _reopenSell = false;
@@ -594,6 +766,8 @@ function show(v) {
   if (v==='game') markSettingsGuideDone();
   currentView = v;
   updateVoiceUI();
+  updateNetBanner();
+  renderWait();
 }
 
 // ===== LOBBY =====
@@ -607,7 +781,14 @@ function joinRoom() {
   const n = document.getElementById('inp-jname').value.trim();
   if(!c||!n) return;
   savedMyName = n; saveSession();
-  socket.emit('join-room', { code: c, name: n, token: playerToken });
+  // 本机记录里正好是这个房间和名字：带上之前的令牌，这样能直接接回原座位
+  const last = readLastSeat();
+  if (last && last.code === c.toUpperCase() && last.name === n && last.token !== playerToken) {
+    resumeSeat = last;
+    socket.emit('join-room', { code: c, name: n, token: playerToken, prevToken: last.token });
+  } else {
+    socket.emit('join-room', { code: c, name: n, token: playerToken });
+  }
 }
 document.getElementById('inp-cname').onkeydown = e => { if(e.key==='Enter') createRoom(); };
 document.getElementById('inp-jcode').onkeydown = e => { if(e.key==='Enter') document.getElementById('inp-jname').focus(); };
@@ -625,7 +806,8 @@ function renderRoom() {
     const r = ROLES[p.role]||ROLES.freshman;
     const readyBadge = p.ready ? '<span class="pl-badge" style="background:#d4edda;color:#27ae60">✓ 已准备</span>' : '<span class="pl-badge" style="background:#f8d7da;color:#dc3545">未准备</span>';
     const voiceIcon = (room.voice||[]).includes(p.id) ? ' <span title="在语音中">🎤</span>' : '';
-    return `<div class="pl-item"><div class="pl-dot" style="background:${p.color}"></div><span class="pl-name">${r.emoji} ${p.name}${voiceIcon}</span>${readyBadge}<span style="font-size:10px;color:#888;margin-left:auto">${r.name}</span></div>`;
+    const netSpan = `<span class="net-tag" data-net-pi="${room.players.indexOf(p)}" style="display:none"></span>`;
+    return `<div class="pl-item"><div class="pl-dot" style="background:${p.color}"></div><span class="pl-name">${r.emoji} ${p.name}${voiceIcon}${netSpan}</span>${readyBadge}<span style="font-size:10px;color:#888;margin-left:auto">${r.name}</span></div>`;
   }).join('');
   if (active.length < 6) list.innerHTML += '<div class="pl-wait">等待更多玩家加入...</div>';
   // Role selection
@@ -657,6 +839,7 @@ function renderRoom() {
   } else if (hint) {
     hint.remove();
   }
+  renderPresence();
 }
 function selectRole(role){ socket.emit('select-role',{role}); }
 function copyCode() {
@@ -743,7 +926,7 @@ function renderGame() {
   const area = document.getElementById('playersArea');
   area.innerHTML = '';
   room.players.forEach((p, i) => {
-    if (p.disconnected) return;
+    // 掉线 / 暂时离开的人照样显示（他们的钱和地产还在局里），只加个标签
     const isMe = i===mi, isTurn = i===room.currentTurn;
     const emoji = EMOJIS[i % EMOJIS.length];
     const owned = Object.entries(room.properties).filter(([_,v])=>v.owner===i).map(([sid])=>S[+sid]);
@@ -751,12 +934,12 @@ function renderGame() {
     const posN = S[p.position]?.n || '起点';
     const formerDots = p.bankrupt ? (p.lastPropertyDetails||[]).map(d=>`<span class="pc-dot" style="background:#bbb">${d.name}${d.level>0?' Lv'+d.level:''}</span>`).join('') : '';
     const card = document.createElement('div');
-    card.className = `player-card${isMe?' is-me':''}${isTurn?' on-turn':''}`;
+    card.className = `player-card${isMe?' is-me':''}${isTurn?' on-turn':''}${p.disconnected && !p.bankrupt?' away':''}`;
     card.style.borderLeftColor = p.color;
     const roleEmoji = ROLES[p.role]?.emoji||'🎒';
     const roleName = ROLES[p.role]?.name||'新生';
     card.innerHTML = `
-      <div class="pc-top"><span class="pc-name" style="color:${p.color}"><span class="pc-emoji">${emoji}</span>${p.name}${isMe?' (我)':''} <span style="font-size:11px">${roleEmoji}</span>${(room.voice||[]).includes(p.id)?' <span style="font-size:11px" title="在语音中">🎤</span>':''}</span><span class="pc-money${p.money<0?' negative':''}">${p.money<0?'-':''}¥${Math.abs(p.money).toLocaleString()}</span></div>
+      <div class="pc-top"><span class="pc-name" style="color:${p.color}"><span class="pc-emoji">${emoji}</span>${p.name}${isMe?' (我)':''} <span style="font-size:11px">${roleEmoji}</span>${(room.voice||[]).includes(p.id)?' <span style="font-size:11px" title="在语音中">🎤</span>':''}<span class="net-tag" data-net-pi="${i}" style="display:none"></span></span><span class="pc-money${p.money<0?' negative':''}">${p.money<0?'-':''}¥${Math.abs(p.money).toLocaleString()}</span></div>
       <div class="pc-pos">📍 ${posN}${p.bankrupt?' · 已退学':(p.inDebt?' · ⚠️ 欠款中':'')} · ${roleName}</div>
       <div class="pc-props">${p.bankrupt ? (formerDots ? `<span style="font-size:10px;color:#999">曾拥有（¥${(p.lastPropertyValue||0).toLocaleString()}）：</span>${formerDots}` : '<span style="font-size:10px;color:#ccc">曾无地产</span>') : (dots||'<span style="font-size:10px;color:#ccc">暂无地产</span>')}</div>`;
     area.appendChild(card);
@@ -771,13 +954,14 @@ function renderGame() {
 
   // Log
   document.getElementById('logList').innerHTML = room.log.slice(-20).reverse().map(l=>`<div class="log-entry">${l}</div>`).join('');
+  renderPresence();
 }
 
 function updateTokens(){
   document.querySelectorAll('.cell .tokens').forEach(t=>t.innerHTML='');
   if(!room) return;
   room.players.forEach((p,i)=>{
-    if(p.disconnected||p.bankrupt) return;
+    if(p.bankrupt) return;   // 掉线 / 暂时离开的人棋子留在原地
     const cell=document.querySelector(`.cell[data-space="${p.position}"] .tokens`);
     if(!cell) return;
     const tk=document.createElement('span');

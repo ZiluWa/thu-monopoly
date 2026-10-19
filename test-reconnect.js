@@ -4,6 +4,8 @@
 // 运行: node test-reconnect.js  (需要 devDependency socket.io-client)
 const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 const { io } = require('socket.io-client');
 
 const PORT = 3123;
@@ -38,7 +40,8 @@ async function waitFor(cond, timeoutMs, what) {
 
 async function main() {
   const server = spawn(process.execPath, [path.join(__dirname, 'server.js')], {
-    env: { ...process.env, PORT: String(PORT) },
+    // 统计数据写到临时目录，不动本地 data/stats.json
+    env: { ...process.env, PORT: String(PORT), DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'monopoly-test-')) },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   server.stderr.on('data', d => process.stderr.write(`[server] ${d}`));
