@@ -507,8 +507,8 @@ const EMOJIS=['👧🏻','👦🏽','👩🏿','🧑🏼','👸🏾','🤴🏻']
 const socket = io({
   reconnection: true,
   reconnectionAttempts: Infinity,
-  reconnectionDelay: 1000,
-  reconnectionDelayMax: 5000,
+  reconnectionDelay: 500,      // 断了以后尽快重连：0.5 秒起，最多隔 2 秒再试
+  reconnectionDelayMax: 2000,
   timeout: 20000,
   transports: ['websocket', 'polling'],
   tryAllTransports: true,   // WebSocket 连不上时退回普通 HTTP 轮询（socket.io 4.8 起要显式打开）
@@ -580,20 +580,98 @@ function leaveToLobby(msg) {
   if (msg) showModal(`<h3>回到大厅</h3><p style="margin:10px 0;line-height:1.6">${esc(msg)}</p><div class="modal-btns"><button class="mo" onclick="hideModal()">知道了</button></div>`);
 }
 
+// ===== 连接诊断记录 =====
+// 断开/重连、切后台、有没有网、网络类型、页面卡住、页面报错、玩家看到了什么提示……都记在本机，
+// 自动传到服务器 /api/clientlog（连接日志里以 c. 开头），用来分清掉线是网络、切走了还是我们的 bug。
+const NET_KEY = 'monopolyNetEvents', NET_MAX = 300;
+let clientId = ls.get('monopolyCid');
+if (!clientId) { clientId = Math.random().toString(36).slice(2) + Date.now().toString(36); ls.set('monopolyCid', clientId); }
+let netEvents = [];
+try { netEvents = JSON.parse(ls.get(NET_KEY) || '[]') || []; } catch (e) { netEvents = []; }
+function logNet(type, data) {
+  try {
+    const c = navigator.connection || {};
+    netEvents.push(Object.assign({ type, ct: Date.now(), room: savedRoomCode || undefined, sid: socket.id || undefined, view: currentView,
+      vis: document.visibilityState, online: navigator.onLine, nt: c.type || undefined, ne: c.effectiveType || undefined }, data || {}));
+    if (netEvents.length > NET_MAX) netEvents = netEvents.slice(-NET_MAX);
+    ls.set(NET_KEY, JSON.stringify(netEvents));
+  } catch (e) {}
+}
+let _netUploading = false;
+function uploadNet(beacon) {
+  if (!netEvents.length || _netUploading) return;
+  const batch = netEvents.slice(0, 100);
+  let tz = ''; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) {}
+  const body = JSON.stringify({ cid: clientId, name: savedMyName || undefined, tz, lang: navigator.language, events: batch });
+  const sent = () => { netEvents = netEvents.slice(batch.length); ls.set(NET_KEY, JSON.stringify(netEvents)); };
+  if (beacon && navigator.sendBeacon) {   // 页面要关了：用 sendBeacon 尽量发出去
+    try { if (navigator.sendBeacon('/api/clientlog', new Blob([body], { type: 'application/json' }))) sent(); } catch (e) {}
+    return;
+  }
+  _netUploading = true;
+  fetch('/api/clientlog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true })
+    .then(r => { if (r.ok) sent(); }).catch(() => {}).finally(() => { _netUploading = false; });
+}
+setInterval(() => uploadNet(false), 20000);
+try { const nav = performance.getEntriesByType('navigation')[0]; logNet('load', { nav: nav && nav.type }); } catch (e) { logNet('load'); }
+
+// 切回页面、手机恢复网络时，如果还没连上就立刻重连，不等重试间隔
+let _lastKick = 0;
+function reconnectNow(why) {
+  if (socket.connected || Date.now() - _lastKick < 2000) return;
+  _lastKick = Date.now();
+  logNet('kick', { why });
+  socket.disconnect(); socket.connect();
+}
+document.addEventListener('visibilitychange', () => {
+  const vis = document.visibilityState === 'visible';
+  logNet(vis ? 'show' : 'hide');
+  if (vis) reconnectNow('visible'); else uploadNet(true);
+});
+window.addEventListener('online', () => { logNet('online'); reconnectNow('online'); });
+window.addEventListener('offline', () => logNet('offline'));
+window.addEventListener('pagehide', () => { logNet('pagehide'); uploadNet(true); });
+window.addEventListener('pageshow', (e) => { if (e.persisted) { logNet('pageshow-cache'); reconnectNow('bfcache'); } });
+document.addEventListener('freeze', () => logNet('freeze'));
+document.addEventListener('resume', () => logNet('resume'));
+try { if (navigator.connection && navigator.connection.addEventListener) navigator.connection.addEventListener('change', () => logNet('net-change')); } catch (e) {}
+window.addEventListener('error', (e) => logNet('js-error', { msg: String(e.message || '').slice(0, 200), at: String(e.filename || '').split('/').pop() + ':' + e.lineno }));
+window.addEventListener('unhandledrejection', (e) => logNet('js-error', { msg: String((e.reason && (e.reason.message || e.reason)) || '').slice(0, 200) }));
+// 页面被系统挂起（计时器长时间没走）、或者连着却收不到服务器心跳（连接其实已经死了）
+let _lastTick = Date.now(), _lastPing = Date.now(), _noPingLogged = false;
+socket.io.on('ping', () => { _lastPing = Date.now(); _noPingLogged = false; });
+setInterval(() => {
+  const now = Date.now(), gap = now - _lastTick; _lastTick = now;
+  if (gap > 15000) logNet('stalled', { sec: Math.round(gap / 1000) });
+  if (socket.connected && document.visibilityState === 'visible' && now - _lastPing > 30000 && !_noPingLogged) { _noPingLogged = true; logNet('no-ping', { sec: Math.round((now - _lastPing) / 1000) }); }
+}, 1000);
+
 // 自己断网时顶部提示（4 秒内连回来就不提示，免得一闪一闪）
-let _netBannerTimer = null, _reconnectTry = 0;
+let _netBannerTimer = null, _reconnectTry = 0, _bannerShownAt = 0, _discAt = 0;
 function updateNetBanner() {
   const b = document.getElementById('netBanner'); if (!b) return;
   const inRoom = currentView === 'room' || currentView === 'game';
-  if (socket.connected || !inRoom) { clearTimeout(_netBannerTimer); _netBannerTimer = null; b.style.display = 'none'; return; }
+  if (socket.connected || !inRoom) {
+    clearTimeout(_netBannerTimer); _netBannerTimer = null;
+    if (_bannerShownAt) { logNet('banner-off', { sec: Math.round((Date.now() - _bannerShownAt) / 1000) }); _bannerShownAt = 0; }
+    b.style.display = 'none'; return;
+  }
   b.textContent = `📶 网络断开，正在重连…${_reconnectTry ? `（第 ${_reconnectTry} 次）` : ''}`;
   if (b.style.display === 'none' && !_netBannerTimer) {
-    _netBannerTimer = setTimeout(() => { _netBannerTimer = null; if (!socket.connected) b.style.display = ''; }, 4000);
+    _netBannerTimer = setTimeout(() => {
+      _netBannerTimer = null;
+      if (!socket.connected) { b.style.display = ''; _bannerShownAt = Date.now(); logNet('banner-on'); }
+    }, 4000);
   }
 }
 
 socket.on('connect', () => {
   myId = socket.id;
+  _lastPing = Date.now();
+  logNet('connect', { down: _discAt ? Date.now() - _discAt : undefined, tries: _reconnectTry || undefined, tr: socket.io.engine && socket.io.engine.transport && socket.io.engine.transport.name });
+  if (socket.io.engine) socket.io.engine.once('upgrade', (t) => logNet('upgrade', { tr: t && t.name }));
+  _discAt = 0;
+  uploadNet(false);
   _reconnectTry = 0;
   document.getElementById('connStatus').textContent = '已连接 ✓';
   document.getElementById('connStatus').style.color = '';
@@ -609,7 +687,13 @@ socket.on('connect', () => {
     socket.emit('join-room', { code: resumeSeat.code, name: resumeSeat.name, token: playerToken, prevToken: resumeSeat.token, auto: true });
   }
 });
-socket.on('disconnect', () => {
+socket.on('connect_error', (e) => logNet('connect-error', { msg: String((e && e.message) || '').slice(0, 120) }));
+socket.on('disconnect', (reason, details) => {
+  _discAt = Date.now();
+  const ctx = details && details.context;
+  logNet('disconnect', { reason, desc: details && typeof details.description === 'string' ? details.description : (details && details.description && details.description.message) || undefined,
+    code: ctx && ctx.code, clean: ctx && ctx.wasClean, sinceping: Math.round((Date.now() - _lastPing) / 1000) });
+  uploadNet(false);   // 网络可能还通（只是这条连接断了），能发就先发
   const cs = document.getElementById('connStatus');
   cs.textContent = '连接断开，重连中...';
   cs.style.color = '#e74c3c';
@@ -645,6 +729,7 @@ const REJOIN_MSGS = {
   'full': '房间已满（最多 6 人）。',
 };
 socket.on('rejoin-failed', (info) => {
+  logNet('rejoin-failed', { reason: info && info.reason });
   if (!savedRoomCode && resumeSeat) {           // 新页面自动接回没成功：安静地留在大厅
     const cur = readLastSeat();
     if (cur && cur.token === resumeSeat.token) ls.del(LAST_SEAT_KEY);
@@ -655,6 +740,7 @@ socket.on('rejoin-failed', (info) => {
 });
 // 新页面想接回座位，但旧页面还连着：问一下在哪边继续
 socket.on('resume-conflict', (info) => {
+  logNet('resume-conflict');
   if (!resumeSeat) return;
   showModal(`<h3>在这里继续？</h3><p style="margin:10px 0;line-height:1.6">你在另一个页面或设备上正在玩房间 <b>${esc(info && info.code)}</b>（昵称 <b>${esc(info && info.name)}</b>）。</p><p style="font-size:12px;color:#888">在这里继续的话，那边会自动断开。</p><div class="modal-btns"><button class="mc" onclick="declineResume()">不用了</button><button class="mo" onclick="takeoverResume()">在这里继续</button></div>`, true);
 });
@@ -669,6 +755,7 @@ function declineResume() {
 }
 // 这个座位被别的页面接走了
 socket.on('seat-taken', () => {
+  logNet('seat-taken');
   stopVoice(false);
   room = null; clearTabSession(); hideModal(); show('lobby');
   showModal(`<h3>已在别处继续</h3><p style="margin:10px 0;line-height:1.6">这局游戏已经在另一个页面或设备上继续了，这个页面不再同步。</p><div class="modal-btns"><button class="mo" onclick="hideModal()">知道了</button></div>`);

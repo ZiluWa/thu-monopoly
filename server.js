@@ -57,9 +57,9 @@ function uaFamily(ua) {
     : /Edg\//.test(s) ? 'edge' : /Chrome\/|CriOS/.test(s) ? 'chrome' : /Firefox\/|FxiOS/.test(s) ? 'firefox' : /Safari\//.test(s) ? 'safari' : 'other';
   return `${os}-${app}`;
 }
-function netlog(obj) {
+function netlog(obj, quiet) {
   const line = JSON.stringify({ t: new Date().toISOString(), ...obj });
-  console.log('[net]', line);
+  if (!quiet) console.log('[net]', line);
   try {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.appendFileSync(NETLOG_FILE, line + '\n');
@@ -152,6 +152,37 @@ app.get('/api/netlog', adminAuth, (req, res) => {
   let lines = [];
   try { lines = fs.readFileSync(NETLOG_FILE, 'utf8').trim().split('\n'); } catch (e) {}
   res.type('text/plain; charset=utf-8').send(lines.slice(-n).join('\n'));
+});
+
+// 页面自动上传的诊断记录（断开原因、是否在后台、有没有网、重连用了多久、页面报错、看到了什么提示）
+// 每条存成连接日志里的一行，ev 以 "c." 开头；每个 IP 每分钟最多 60 次，单次最多 200 条
+const clientLogHits = new Map();
+const clip = (v, n) => (v === undefined || v === null) ? undefined : String(v).slice(0, n);
+app.post('/api/clientlog', express.json({ limit: '64kb' }), (req, res) => {
+  try {
+    const ip = req.headers['fly-client-ip'] || (req.socket && req.socket.remoteAddress) || '';
+    const now = Date.now();
+    if (clientLogHits.size > 5000) clientLogHits.clear();
+    const hit = clientLogHits.get(ip) || { n: 0, reset: now + 60000 };
+    if (now > hit.reset) { hit.n = 0; hit.reset = now + 60000; }
+    if (++hit.n > 60) { clientLogHits.set(ip, hit); return res.status(429).end(); }
+    clientLogHits.set(ip, hit);
+    const b = req.body || {};
+    const base = { cid: clip(b.cid, 40), name: clip(b.name, 20), tz: clip(b.tz, 40), lang: clip(b.lang, 20), ua: uaFamily(req.headers['user-agent']), edge: req.headers['fly-region'] };
+    for (const e of (Array.isArray(b.events) ? b.events.slice(0, 200) : [])) {
+      if (!e || typeof e !== 'object') continue;
+      const ev = {};
+      for (const [k, v] of Object.entries(e).slice(0, 20)) ev[clip(k, 20)] = (typeof v === 'number' || typeof v === 'boolean') ? v : clip(v, 200);
+      netlog({ ...base, ...ev, ev: 'c.' + clip(e.type, 30) }, true);
+    }
+    res.status(204).end();
+  } catch (err) { res.status(400).end(); }
+});
+
+// 没连上的尝试（握手失败、会话不存在等），以前完全看不到
+io.engine.on('connection_error', (err) => {
+  const h = (err && err.req && err.req.headers) || {};
+  netlog({ ev: 'conn_err', code: err && err.code, msg: clip(err && err.message, 120), edge: h['fly-region'], ua: uaFamily(h['user-agent']) });
 });
 
 // ===== Rate Limiting =====
