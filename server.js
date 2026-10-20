@@ -6,12 +6,11 @@ const fs = require('fs');
 
 const app = express();
 const server = createServer(app);
+// 不开 socket.io 自带的 connectionStateRecovery：它恢复后不删旧会话，手机切网络时新旧两条连接会共用同一个 id，
+// 旧连接一断就把新连接从房间里摘掉（页面卡死、被当成掉线）。重连改由页面在握手里带上身份，按令牌接回座位。
 const io = new Server(server, {
   pingTimeout: 30000,
   pingInterval: 10000,
-  connectionStateRecovery: {
-    maxDisconnectionDuration: 2 * 60 * 1000,
-  },
 });
 
 app.use(express.static(path.join(__dirname, 'public'), {
@@ -775,12 +774,14 @@ io.on('connection', (socket) => {
   const hdrs = (socket.handshake && socket.handshake.headers) || {};
   netlog({ ev: 'conn', sid: socket.id, rec: !!socket.recovered, tr: socket.conn?.transport?.name, edge: hdrs['fly-region'], ua: uaFamily(hdrs['user-agent']) });
 
-  // 闪断后恢复了同一个连接：立刻接回座位（客户端断线期间缓存的操作会在 join-room 之前到达）
-  if (socket.recovered) {
-    for (const [code, room] of rooms) {
-      const p = room.players.find(pl => pl.id === socket.id);
-      if (p) { attachSocket(room, code, p, socket); broadcast(code); break; }
-    }
+  // 页面重连时在握手里带上 房间号/名字/令牌：连上的同一刻就接回自己的座位
+  // （只认这一个房间里令牌和名字都对上的座位；断线期间页面缓存的操作会在 join-room 之前到达，也能正常生效）
+  const auth = (socket.handshake && socket.handshake.auth) || {};
+  if (auth.code && auth.token && typeof auth.name === 'string') {
+    const code = String(auth.code).toUpperCase().trim();
+    const room = rooms.get(code);
+    const seat = room && room.players.find(p => p.token === auth.token && p.name === auth.name);
+    if (seat) { attachSocket(room, code, seat, socket); broadcast(code); }
   }
 
   // create-room: max 5 per 30s
@@ -822,7 +823,7 @@ io.on('connection', (socket) => {
     const room = rooms.get(code);
     if (!room) return fail('room-gone', '房间不存在，请检查代码');
 
-    // 1) 这个连接本来就坐在这个房间里（闪断后恢复了同一个连接 / 重复发送）
+    // 1) 这个连接本来就坐在这个房间里（握手时已经接回座位 / 重复发送）
     const own = room.players.find(p => p.id === socket.id);
     if (own) { attachSocket(room, code, own, socket); broadcast(code); return; }
 

@@ -255,6 +255,49 @@ async function main() {
       check(g2 && !g2.endTime, '还在进行的那局没有被误写', g2);
     }
 
+    console.log('\n[14] 换过房间的人网络闪断：只回到现在的房间，不会被拉回旧房间');
+    {
+      const [a, b] = await newRoom(['A14', 'B14'], { start: false });
+      const oldCode = a.code;
+      a.s.emit('create-room', { name: 'A14', token: a.token });          // A 离开旧房间、新建一个
+      await waitFor(() => a.code && a.code !== oldCode);
+      const newCode = a.code;
+      const c = client('C14', 'tok-c14'); await waitFor(() => c.s.connected);
+      c.s.emit('join-room', { code: newCode, name: 'C14', token: c.token });
+      await waitFor(() => c.room && c.room.players.length === 2);
+      const seen = [];
+      a.s.on('room-update', r => seen.push(r.code));
+      a.s.io.engine.close();                                              // 闪断，自动重连
+      await waitFor(() => !a.s.connected, 2000); await waitFor(() => a.s.connected, 5000); await sleep(800);
+      b.s.emit('toggle-ready'); await sleep(600);                         // 旧房间里有动静
+      check(!seen.includes(oldCode) && a.code === newCode, '重连后没有收到旧房间的画面，仍在新房间', { seen, now: a.code, oldCode, newCode });
+      check(b.room.players.find(p => p.name === 'A14').disconnected, '旧房间里 A 仍是"已离开"，没被错误地拉回去');
+    }
+
+    console.log('\n[15] 手机切网络时新旧两条连接重叠：旧连接断开后，新连接照常能收能发');
+    {
+      const [a, b] = await newRoom(['A15', 'B15'], { start: false });
+      const code = a.code;
+      a.s.io.engine.close();                                              // 先闪断一次（服务器留下可恢复的会话）
+      await waitFor(() => !a.s.connected, 2000); await waitFor(() => a.s.connected, 5000); await sleep(500);
+      // 模拟手机换了网络：新连接带着旧会话号连上来，此时服务器上的旧连接还没断
+      const a2 = io(URL, { transports: ['websocket'], forceNew: true, autoConnect: false, reconnection: false,
+                           auth: { code, name: 'A15', token: a.token } });
+      a2._pid = a.s._pid; a2._lastOffset = a.s._lastOffset;
+      let a2room = null; a2.on('room-update', r => a2room = r);
+      a2.connect(); await waitFor(() => a2.connected, 3000);
+      a2.emit('join-room', { code, name: 'A15', token: a.token, auto: true });
+      await sleep(500);
+      a.rejoin = false; a.s.close(); await sleep(600);                    // 旧连接这时才断
+      a2room = null;
+      b.s.emit('toggle-ready'); await sleep(600);
+      check(!!a2room, '新连接还能收到房间更新（不是"僵尸"连接）');
+      a2.emit('toggle-ready'); await sleep(600);
+      const meA = b.room.players.find(p => p.name === 'A15');
+      check(meA && !meA.offline && meA.ready, '新连接的操作服务器照收，别人看到他在线', meA && { offline: meA.offline, ready: meA.ready });
+      a2.close();
+    }
+
     console.log('\n[13] 连接日志');
     {
       const log = await fetch(`${URL}/api/netlog?pw=monopoly2024&n=5000`).then(r => r.text());

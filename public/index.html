@@ -512,6 +512,12 @@ const socket = io({
   timeout: 20000,
   transports: ['websocket', 'polling'],
   tryAllTransports: true,   // WebSocket 连不上时退回普通 HTTP 轮询（socket.io 4.8 起要显式打开）
+  // 每次（重）连都在握手里带上自己的座位，服务器连上的同一刻就接回（读的是连接那一刻的最新值）
+  auth: (cb) => {
+    let a = {};
+    try { if (savedRoomCode && savedMyName) a = { code: savedRoomCode, name: savedMyName, token: playerToken }; } catch (e) {}
+    cb(a);
+  },
 });
 let room = null, myId = null, animating = false, chatOpen = false, unread = 0, menuOpen = false, prevTurn = -1, currentView = 'lobby';
 let clockOffset = 0;   // 服务器时间 - 本机时间，倒计时按服务器时间算
@@ -574,7 +580,7 @@ function leaveToLobby(msg) {
   if (msg) showModal(`<h3>回到大厅</h3><p style="margin:10px 0;line-height:1.6">${esc(msg)}</p><div class="modal-btns"><button class="mo" onclick="hideModal()">知道了</button></div>`);
 }
 
-// 自己断网时顶部提示（闪断 1.5 秒内不提示，免得一闪一闪）
+// 自己断网时顶部提示（4 秒内连回来就不提示，免得一闪一闪）
 let _netBannerTimer = null, _reconnectTry = 0;
 function updateNetBanner() {
   const b = document.getElementById('netBanner'); if (!b) return;
@@ -582,7 +588,7 @@ function updateNetBanner() {
   if (socket.connected || !inRoom) { clearTimeout(_netBannerTimer); _netBannerTimer = null; b.style.display = 'none'; return; }
   b.textContent = `📶 网络断开，正在重连…${_reconnectTry ? `（第 ${_reconnectTry} 次）` : ''}`;
   if (b.style.display === 'none' && !_netBannerTimer) {
-    _netBannerTimer = setTimeout(() => { _netBannerTimer = null; if (!socket.connected) b.style.display = ''; }, 1500);
+    _netBannerTimer = setTimeout(() => { _netBannerTimer = null; if (!socket.connected) b.style.display = ''; }, 4000);
   }
 }
 
