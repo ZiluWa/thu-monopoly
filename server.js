@@ -8,6 +8,7 @@ const app = express();
 const server = createServer(app);
 // 不开 socket.io 自带的 connectionStateRecovery：它恢复后不删旧会话，手机切网络时新旧两条连接会共用同一个 id，
 // 旧连接一断就把新连接从房间里摘掉（页面卡死、被当成掉线）。重连改由页面在握手里带上身份，按令牌接回座位。
+// 心跳间隔 10 秒：页面在前台 15 秒收不到任何消息就当连接卡死、主动重连（index.html 的 STALL_MS），改这里要一起改
 const io = new Server(server, {
   pingTimeout: 30000,
   pingInterval: 10000,

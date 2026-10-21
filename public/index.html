@@ -609,8 +609,11 @@ function uploadNet(beacon) {
     return;
   }
   _netUploading = true;
-  fetch('/api/clientlog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true })
-    .then(r => { if (r.ok) sent(); }).catch(() => {}).finally(() => { _netUploading = false; });
+  // 10 秒没传完就放弃这次（连接卡死时请求会一直挂着，不放弃的话之后的记录就再也传不上去了）
+  let ctl = null; try { ctl = new AbortController(); } catch (e) {}
+  const timer = ctl ? setTimeout(() => ctl.abort(), 10000) : null;
+  fetch('/api/clientlog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true, signal: ctl ? ctl.signal : undefined })
+    .then(r => { if (r.ok) sent(); }).catch(() => {}).finally(() => { clearTimeout(timer); _netUploading = false; });
 }
 setInterval(() => uploadNet(false), 20000);
 try { const nav = performance.getEntriesByType('navigation')[0]; logNet('load', { nav: nav && nav.type }); } catch (e) { logNet('load'); }
@@ -637,13 +640,22 @@ document.addEventListener('resume', () => logNet('resume'));
 try { if (navigator.connection && navigator.connection.addEventListener) navigator.connection.addEventListener('change', () => logNet('net-change')); } catch (e) {}
 window.addEventListener('error', (e) => logNet('js-error', { msg: String(e.message || '').slice(0, 200), at: String(e.filename || '').split('/').pop() + ':' + e.lineno }));
 window.addEventListener('unhandledrejection', (e) => logNet('js-error', { msg: String((e.reason && (e.reason.message || e.reason)) || '').slice(0, 200) }));
-// 页面被系统挂起（计时器长时间没走）、或者连着却收不到服务器心跳（连接其实已经死了）
-let _lastTick = Date.now(), _lastPing = Date.now(), _noPingLogged = false;
-socket.io.on('ping', () => { _lastPing = Date.now(); _noPingLogged = false; });
+// 页面被系统挂起（计时器长时间没走）时记一笔。
+// 连接卡死（代理线路坏了时常见：不报错，只是什么都收不到）：服务器每 10 秒发一次心跳，
+// 页面在前台时 15 秒什么都没收到，就主动断开重连，不等浏览器 40 秒后才发现。后台不管（手机本来就会冻住后台页面）。
+const STALL_MS = 15000;
+let _lastTick = Date.now(), _lastRx = Date.now();
+socket.io.on('ping', () => { _lastRx = Date.now(); });
+socket.io.on('packet', () => { _lastRx = Date.now(); });
 setInterval(() => {
   const now = Date.now(), gap = now - _lastTick; _lastTick = now;
   if (gap > 15000) logNet('stalled', { sec: Math.round(gap / 1000) });
-  if (socket.connected && document.visibilityState === 'visible' && now - _lastPing > 30000 && !_noPingLogged) { _noPingLogged = true; logNet('no-ping', { sec: Math.round((now - _lastPing) / 1000) }); }
+  if (gap > 3000) return;   // 页面刚从冻结中恢复：先让积压的消息处理完，下一秒再判断
+  if (socket.connected && document.visibilityState === 'visible' && now - _lastRx > STALL_MS) {
+    logNet('stall-reconnect', { sec: Math.round((now - _lastRx) / 1000) });
+    _lastRx = now; _lastKick = now;
+    socket.disconnect(); socket.connect();
+  }
 }, 1000);
 
 // 自己断网时顶部提示（4 秒内连回来就不提示，免得一闪一闪）
@@ -667,7 +679,7 @@ function updateNetBanner() {
 
 socket.on('connect', () => {
   myId = socket.id;
-  _lastPing = Date.now();
+  _lastRx = Date.now();
   logNet('connect', { down: _discAt ? Date.now() - _discAt : undefined, tries: _reconnectTry || undefined, tr: socket.io.engine && socket.io.engine.transport && socket.io.engine.transport.name });
   if (socket.io.engine) socket.io.engine.once('upgrade', (t) => logNet('upgrade', { tr: t && t.name }));
   _discAt = 0;
@@ -692,7 +704,7 @@ socket.on('disconnect', (reason, details) => {
   _discAt = Date.now();
   const ctx = details && details.context;
   logNet('disconnect', { reason, desc: details && typeof details.description === 'string' ? details.description : (details && details.description && details.description.message) || undefined,
-    code: ctx && ctx.code, clean: ctx && ctx.wasClean, sinceping: Math.round((Date.now() - _lastPing) / 1000) });
+    code: ctx && ctx.code, clean: ctx && ctx.wasClean, sinceping: Math.round((Date.now() - _lastRx) / 1000) });
   uploadNet(false);   // 网络可能还通（只是这条连接断了），能发就先发
   const cs = document.getElementById('connStatus');
   cs.textContent = '连接断开，重连中...';
