@@ -49,6 +49,7 @@ const serverStartTime = Date.now();
 
 // ===== 连接日志：每次连上/断开记一行（断开原因、连了多久、从哪个 Fly 节点进来、什么浏览器），用来排查掉线 =====
 // 存在卷上 /data/netlog.jsonl，超过 5MB 轮换一次；后台 /api/netlog 可以查看
+// 每行带玩家 IP（ip）：用来判断是不是开着代理、走的哪条线路
 const NETLOG_FILE = path.join(DATA_DIR, 'netlog.jsonl');
 function uaFamily(ua) {
   const s = String(ua || '');
@@ -168,7 +169,7 @@ app.post('/api/clientlog', express.json({ limit: '64kb' }), (req, res) => {
     if (++hit.n > 60) { clientLogHits.set(ip, hit); return res.status(429).end(); }
     clientLogHits.set(ip, hit);
     const b = req.body || {};
-    const base = { cid: clip(b.cid, 40), name: clip(b.name, 20), tz: clip(b.tz, 40), lang: clip(b.lang, 20), ua: uaFamily(req.headers['user-agent']), edge: req.headers['fly-region'] };
+    const base = { cid: clip(b.cid, 40), name: clip(b.name, 20), tz: clip(b.tz, 40), lang: clip(b.lang, 20), ua: uaFamily(req.headers['user-agent']), edge: req.headers['fly-region'], ip };
     for (const e of (Array.isArray(b.events) ? b.events.slice(0, 200) : [])) {
       if (!e || typeof e !== 'object') continue;
       const ev = {};
@@ -182,7 +183,7 @@ app.post('/api/clientlog', express.json({ limit: '64kb' }), (req, res) => {
 // 没连上的尝试（握手失败、会话不存在等），以前完全看不到
 io.engine.on('connection_error', (err) => {
   const h = (err && err.req && err.req.headers) || {};
-  netlog({ ev: 'conn_err', code: err && err.code, msg: clip(err && err.message, 120), edge: h['fly-region'], ua: uaFamily(h['user-agent']) });
+  netlog({ ev: 'conn_err', code: err && err.code, msg: clip(err && err.message, 120), edge: h['fly-region'], ip: h['fly-client-ip'], ua: uaFamily(h['user-agent']), uaFull: clip(h['user-agent'], 300) });
 });
 
 // ===== Rate Limiting =====
@@ -803,7 +804,8 @@ io.on('connection', (socket) => {
 
   const connectedAt = Date.now();
   const hdrs = (socket.handshake && socket.handshake.headers) || {};
-  netlog({ ev: 'conn', sid: socket.id, rec: !!socket.recovered, tr: socket.conn?.transport?.name, edge: hdrs['fly-region'], ua: uaFamily(hdrs['user-agent']) });
+  const ip = hdrs['fly-client-ip'] || (socket.handshake && socket.handshake.address) || '';
+  netlog({ ev: 'conn', sid: socket.id, rec: !!socket.recovered, tr: socket.conn?.transport?.name, edge: hdrs['fly-region'], ip, ua: uaFamily(hdrs['user-agent']), uaFull: clip(hdrs['user-agent'], 300) });
 
   // 页面重连时在握手里带上 房间号/名字/令牌：连上的同一刻就接回自己的座位
   // （只认这一个房间里令牌和名字都对上的座位；断线期间页面缓存的操作会在 join-room 之前到达，也能正常生效）
@@ -1254,7 +1256,7 @@ io.on('connection', (socket) => {
   // 连接断开（网络闪断、锁屏、关页面都会走这里）：只标记掉线，等他回来
   socket.on('disconnect', safe('disconnect', (reason) => {
     const info = markOffline(socket);
-    netlog({ ev: 'disc', sid: socket.id, reason, sec: Math.round((Date.now() - connectedAt) / 1000), room: info && info.code, name: info && info.name });
+    netlog({ ev: 'disc', sid: socket.id, reason, sec: Math.round((Date.now() - connectedAt) / 1000), room: info && info.code, name: info && info.name, ip });
   }));
 });
 
