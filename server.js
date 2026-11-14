@@ -604,6 +604,7 @@ const AWAY_MS           = envMs('AWAY_MS', 2 * 60000);            // 对局中�
 const LOBBY_AWAY_MS     = envMs('LOBBY_AWAY_MS', 15000);          // 等待开局时掉线超过 15 秒就不再挡着大家开局
 const KEEP_STARTED_MS   = envMs('KEEP_STARTED_MS', 30 * 60000);   // 进行中的对局：全员离线后保留 30 分钟
 const KEEP_IDLE_MS      = envMs('KEEP_IDLE_MS', 15 * 60000);      // 没开局 / 已结束：全员离线后保留 15 分钟
+const VOTE_GUARD_MS     = envMs('VOTE_GUARD_MS', 1000);           // 结算投票发起后 1 秒内到的"同意"不算（来不及看清，只可能是误触）
 
 // 从什么时候开始等这位玩家：他掉线的时刻和轮到他的时刻，取较晚的
 function waitStart(room, p) { return Math.max(p.offlineSince || 0, room.turnStartedAt || 0); }
@@ -1174,10 +1175,15 @@ io.on('connection', (socket) => {
     const p = room.players[pi];
     if (p.bankrupt || p.disconnected) return;
 
+    // 每一步都记进连接日志（谁、做了什么、离发起过了多久），以后有人说"误触结束了"可以查
+    const voteLog = (act, extra) => netlog({ ev: 'vote', act, room: code, name: p.name, ms: room.endVote ? Date.now() - room.endVote.at : 0, round: room.round, ...extra }, true);
+
     if (confirm === false) {
-      // Someone rejected — cancel the vote
+      // 有人不同意，或已同意的人反悔：这次投票作废
       if (room.endVote) {
-        addLog(room, `${p.name} 拒绝了结算请求`);
+        const mine = room.endVote.voters.includes(pi);
+        addLog(room, mine ? `${p.name} 撤回了结算投票` : `${p.name} 不同意结算，游戏继续`);
+        voteLog(mine ? 'withdraw' : 'reject');
         room.endVote = null;
         broadcast(code);
       }
@@ -1186,15 +1192,20 @@ io.on('connection', (socket) => {
 
     // Start or join the vote
     if (!room.endVote) {
-      room.endVote = { voters: [pi], initiator: p.name };
+      room.endVote = { voters: [pi], initiator: p.name, at: Date.now() };
       addLog(room, `${p.name} 发起了结算投票，等待所有玩家确认...`);
+      voteLog('start');
     } else if (!room.endVote.voters.includes(pi)) {
+      // 防误触：投票刚发起的一瞬间到的"同意"不算——对方来不及看清，只可能是手指本来要点别的按钮。
+      // 再广播一次，让还开着旧版页面的人重新看到投票。
+      if (Date.now() - room.endVote.at < VOTE_GUARD_MS) { voteLog('too-fast'); broadcast(code); return; }
       room.endVote.voters.push(pi);
       addLog(room, `${p.name} 同意结算`);
-    }
+      voteLog('agree');
+    } else return;
 
     // 在局里的人（掉线中的也算，暂时离开的不算）都同意了就结算
-    checkEndVote(room);
+    if (checkEndVote(room)) netlog({ ev: 'vote', act: 'settled', room: code, round: room.round }, true);
     broadcast(code);
   });
 

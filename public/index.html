@@ -72,7 +72,7 @@
     .topbar .room-tag{font-size:11px;background:rgba(255,255,255,.2);padding:3px 8px;border-radius:5px;letter-spacing:1px}
     .topbar .spacer{flex:1}
     .topbar .menu-btn{background:none;border:none;color:#fff;font-size:20px;padding:6px}
-    .dropdown{position:absolute;top:46px;right:0;background:#fff;border-radius:0 0 12px 12px;box-shadow:0 8px 24px rgba(0,0,0,.15);min-width:180px;z-index:101;overflow:hidden}
+    .dropdown{position:absolute;top:46px;right:0;background:#fff;border-radius:0 0 12px 12px;box-shadow:0 8px 24px rgba(0,0,0,.15);min-width:180px;z-index:360;overflow:hidden}
     .dropdown button{display:block;width:100%;padding:14px 18px;border:none;background:none;text-align:left;font-size:14px;border-bottom:1px solid #f0f0f0}
     .dropdown button:active{background:#f5f5f5}
     .dropdown button:last-child{border:none}
@@ -225,12 +225,29 @@
     .wait-bar .wb-sub{font-size:11px;color:#e67e22;margin-top:2px}
     .wait-bar .wb-btn{flex-shrink:0;background:#e67e22;color:#fff;border:none;border-radius:8px;padding:9px 12px;font-size:13px;font-weight:700}
     .wait-bar .wb-btn:active{opacity:.85}
+    /* 结算投票：顶部单独一条，盖在弹窗之上，但不替换弹窗里的内容 */
+    .vote-bar{position:fixed;top:54px;left:10px;right:10px;z-index:350;margin:0 auto;max-width:520px;background:#fff;border:2px solid var(--purple);border-radius:12px;padding:10px 12px;box-shadow:0 8px 26px rgba(0,0,0,.3)}
+    .vote-bar .vb-text{font-size:14px;font-weight:700;color:#333;line-height:1.4}
+    .vote-bar .vb-sub{font-size:12px;color:#888;margin-top:2px;line-height:1.4}
+    .vote-bar .vb-btns{display:flex;gap:8px;margin-top:9px}
+    .vote-bar .vb-btns button{flex:1;padding:10px 8px;border-radius:8px;border:none;font-size:14px;font-weight:700}
+    .vote-bar .vb-no{background:#eee;color:#555}
+    .vote-bar .vb-yes{background:var(--purple);color:#fff}
+    .vote-bar .vb-yes.armed{background:#e74c3c}
+    .vote-bar .vb-btns button:disabled{opacity:.4}
+    /* 自己已经同意、在等别人时：压成一行，少挡棋盘 */
+    .vote-bar.compact{display:flex;align-items:center;gap:10px}
+    .vote-bar.compact .vb-info{flex:1;min-width:0}
+    .vote-bar.compact .vb-btns{margin-top:0;flex:none}
+    .vote-bar.compact .vb-btns button{padding:9px 14px}
+    .vote-bar.pulse{animation:votePulse .45s ease 2}
+    @keyframes votePulse{50%{transform:scale(1.04)}}
     .net-tag{font-size:10px;font-weight:600;color:#d35400;background:#fdf2e9;border-radius:6px;padding:1px 6px;margin-left:4px;white-space:nowrap}
     .player-card.away{opacity:.6}
 
     /* ===== PRINT ===== */
     @media print{
-      .net-banner,.wait-bar{display:none!important}
+      .net-banner,.wait-bar,.vote-bar{display:none!important}
       body>*{display:none!important}
       #view-game{display:block!important}
       .topbar,.controls,.chat-toggle,.chat-panel,.voice-toggle,.mute-toggle,.dropdown,.game-footer{display:none!important}
@@ -252,6 +269,8 @@
 <div id="netBanner" class="net-banner" style="display:none"></div>
 <!-- 轮到的人掉线 / 长时间没操作时，给其他人看的提示和「跳过」按钮 -->
 <div id="waitBar" class="wait-bar" style="display:none"><div class="wb-info"><div class="wb-text" id="wbText"></div><div class="wb-sub" id="wbSub"></div></div><button class="wb-btn" onclick="emitSkip()">跳过他这回合</button></div>
+<!-- 结算投票：单独的一条，不占用弹窗（弹窗会顶掉正开着的买地 / 盖房窗口，容易误触） -->
+<div id="voteBar" class="vote-bar" style="display:none"><div class="vb-info"><div class="vb-text" id="vbText"></div><div class="vb-sub" id="vbSub"></div></div><div class="vb-btns" id="vbBtns"><button class="vb-no" id="vbNo" onclick="voteNo()"></button><button class="vb-yes" id="vbYes" onclick="voteYes()"></button></div></div>
 
 <!-- ==================== LOBBY ==================== -->
 <div id="view-lobby" class="lobby">
@@ -813,6 +832,7 @@ function renderWait() {
 }
 function renderPresence() {
   renderWait();
+  renderVoteBar();   // 掷骰动画期间不重画棋盘，但投票那一条要照常更新
   document.querySelectorAll('[data-net-pi]').forEach(el => {
     const t = room ? netTag(room.players[+el.dataset.netPi]) : '';
     el.textContent = t; el.style.display = t ? '' : 'none';
@@ -873,6 +893,7 @@ function show(v) {
   updateVoiceUI();
   updateNetBanner();
   renderWait();
+  renderVoteBar();
 }
 
 // ===== LOBBY =====
@@ -954,9 +975,88 @@ function copyCode() {
 }
 function toggleReady() { socket.emit('toggle-ready'); }
 function emitLeave() { stopVoice(false); socket.emit('leave-room'); room=null; clearSession(); closeMenu(); show('lobby'); }
+// ===== 结算投票 =====
+// 以前别人发起结算时，用弹窗问"同意吗"。弹窗只有一个，它会顶掉正开着的买地 / 盖房窗口，
+// 两个按钮位置还一模一样：手指本来要点「升级」，落下去变成「同意结算」，2 人局当场结束。
+// 现在改成顶部单独一条：不动别的弹窗；按钮刚出现（或换了含义）的 1.5 秒内点不了；「同意」要点两次。
+const VOTE_DELAY_MS = 1500, VOTE_ARM_MS = 5000, VOTE_DOUBLE_MS = 400;
+let _voteMode = '', _voteModeAt = 0, _voteArmedAt = 0, _voteTimer = null;
+function voteState() {
+  if (!room || !room.started || room.finished || !room.endVote || currentView !== 'game') return null;
+  const ev = room.endVote, voted = ev.voters || [];
+  const mi = room.players.findIndex(p => p.id === myId), me = room.players[mi];
+  const canVote = !!me && !me.bankrupt && !me.disconnected;
+  const iVoted = voted.includes(mi);
+  const waiting = room.players.filter((p, i) => !p.bankrupt && !p.disconnected && !voted.includes(i)).map(p => p.id === myId ? '你' : p.name);
+  const agreed = voted.map(i => room.players[i]).filter(Boolean).map(p => p.id === myId ? '你' : p.name);
+  return { ev, canVote, iVoted, iStarted: voted[0] === mi, waiting, agreed, mode: !canVote ? 'watch' : iVoted ? 'voted' : 'ask' };
+}
+function renderVoteBar() {
+  const bar = document.getElementById('voteBar'); if (!bar) return;
+  clearTimeout(_voteTimer); _voteTimer = null;
+  const st = voteState();
+  if (!st) { bar.style.display = 'none'; _voteMode = ''; _voteArmedAt = 0; return; }
+  const now = Date.now();
+  const modeKey = room.code + ':' + (st.ev.at || st.ev.initiator) + ':' + st.mode;
+  if (modeKey !== _voteMode) {            // 这一条刚出现，或按钮换了含义：重新计时
+    _voteMode = modeKey; _voteModeAt = now; _voteArmedAt = 0;
+    const mb = document.getElementById('modalBg');
+    logNet('vote-bar', { mode: st.mode, modal: !!(mb && mb.classList.contains('show')), locked: _modalLocked });
+  }
+  if (_voteArmedAt && now - _voteArmedAt > VOTE_ARM_MS) _voteArmedAt = 0;
+  const locked = now - _voteModeAt < VOTE_DELAY_MS;
+  const text = document.getElementById('vbText'), sub = document.getElementById('vbSub');
+  const btns = document.getElementById('vbBtns'), no = document.getElementById('vbNo'), yes = document.getElementById('vbYes');
+  const others = st.waiting.filter(n => n !== '你').join('、');
+  if (st.mode === 'ask') {
+    text.textContent = `🏁 ${st.ev.initiator} 想结束这一局，按总资产结算`;
+    sub.textContent = others ? `已同意：${st.agreed.join('、')} · 还在等：${st.waiting.join('、')}`
+      : (st.agreed.length > 1 ? `${st.agreed.join('、')} 都同意了。` : '') + '你同意后这一局马上结束，不能反悔';
+    btns.style.display = ''; yes.style.display = '';
+    no.textContent = '继续玩';
+    yes.textContent = _voteArmedAt ? '确定结束？再点一次' : '同意结算';
+    yes.classList.toggle('armed', !!_voteArmedAt);
+  } else if (st.mode === 'voted') {
+    text.textContent = `🏁 你已${st.iStarted ? '发起结算' : '同意结算'}，等 ${others || '其他人'} 同意…`;
+    sub.textContent = '不想结束了可以撤回';
+    btns.style.display = ''; yes.style.display = 'none';
+    no.textContent = '撤回';
+  } else {
+    text.textContent = `🏁 ${st.ev.initiator} 发起了结算投票`;
+    sub.textContent = `已同意：${st.agreed.join('、')} · 还在等：${st.waiting.join('、') || '—'}`;
+    btns.style.display = 'none';
+  }
+  no.disabled = yes.disabled = locked;
+  bar.classList.toggle('compact', st.mode === 'voted');
+  bar.style.display = '';
+  // 到点自动刷新：解除"刚出现点不了"，或让"再点一次"过期变回原样
+  const wake = locked ? VOTE_DELAY_MS - (now - _voteModeAt) : _voteArmedAt ? VOTE_ARM_MS - (now - _voteArmedAt) : 0;
+  if (wake > 0) _voteTimer = setTimeout(renderVoteBar, wake + 30);
+}
+function voteYes() {
+  const st = voteState(); if (!st || st.mode !== 'ask') return;
+  const now = Date.now();
+  if (now - _voteModeAt < VOTE_DELAY_MS) return;
+  if (!_voteArmedAt || now - _voteArmedAt > VOTE_ARM_MS) { _voteArmedAt = now; renderVoteBar(); return; }   // 第一下：只是变成"再点一次"
+  if (now - _voteArmedAt < VOTE_DOUBLE_MS) return;                                                         // 连点两下太快：第二下不算
+  _voteArmedAt = 0;
+  logNet('vote-tap', { what: 'agree', ms: now - _voteModeAt });
+  socket.emit('end-game-vote', { confirm: true });
+}
+function voteNo() {
+  const st = voteState(); if (!st || st.mode === 'watch') return;
+  if (Date.now() - _voteModeAt < VOTE_DELAY_MS) return;
+  logNet('vote-tap', { what: st.mode === 'voted' ? 'withdraw' : 'reject', ms: Date.now() - _voteModeAt });
+  socket.emit('end-game-vote', { confirm: false });
+}
 function confirmEndGame() {
   closeMenu();
   if (!room || !room.started || room.finished) return;
+  if (room.endVote) {                     // 已经有一次投票在进行：提醒看顶部那一条，不再开新窗口
+    const bar = document.getElementById('voteBar');
+    bar.classList.remove('pulse'); void bar.offsetWidth; bar.classList.add('pulse');
+    return;
+  }
   showModal(`<h3>🏁 结束游戏</h3><p style="margin:10px 0">发起结算投票，所有玩家都同意后将按总资产结算。</p><p style="font-size:12px;color:#888">总资产 = 现金 + 地产购入价 + 升级投入</p><div class="modal-btns"><button class="mc" onclick="hideModal()">取消</button><button class="mo" onclick="hideModal();socket.emit('end-game-vote',{confirm:true})">发起投票</button></div>`);
 }
 
@@ -1010,22 +1110,8 @@ function renderGame() {
     if (_reopenSell) { _reopenSell = false; if (meP && meP.inDebt) showSellModal(); }
   }
 
-  // End-game vote prompt
-  const ev = room.endVote;
-  if (ev && !room.finished) {
-    const myIdx = mi;
-    const voted = ev.voters || [];
-    const iVoted = voted.includes(myIdx);
-    const me = room.players[myIdx];
-    const needVote = me && !me.bankrupt && !me.disconnected && !iVoted;
-    if (needVote && !room._votePrompted) {
-      room._votePrompted = true;
-      const voterNames = voted.map(i=>room.players[i]?.name).filter(Boolean).join('、');
-      showModal(`<h3>🏁 结算投票</h3><p style="margin:10px 0"><b>${ev.initiator}</b> 发起了结算投票</p><p style="font-size:12px;color:#888;margin:4px 0">已同意：${voterNames}</p><p style="font-size:12px;color:#888">所有玩家同意后将按总资产结算</p><div class="modal-btns"><button class="mc" onclick="hideModal();socket.emit('end-game-vote',{confirm:false})">拒绝</button><button class="mo" onclick="hideModal();socket.emit('end-game-vote',{confirm:true})">同意结算</button></div>`);
-    }
-  } else {
-    room._votePrompted = false;
-  }
+  // 结算投票：顶部单独一条（不再用弹窗）
+  renderVoteBar();
 
   // Players
   const area = document.getElementById('playersArea');

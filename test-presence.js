@@ -9,7 +9,7 @@ const { io } = require('socket.io-client');
 
 const PORT = 3124;
 const URL = `http://localhost:${PORT}`;
-const T = { OFFLINE_NOTICE_MS: 1000, AUTO_SKIP_MS: 2000, IDLE_SKIP_MS: 3000, AWAY_MS: 6000, LOBBY_AWAY_MS: 2000, KEEP_STARTED_MS: 4000, KEEP_IDLE_MS: 3000 };
+const T = { OFFLINE_NOTICE_MS: 1000, AUTO_SKIP_MS: 2000, IDLE_SKIP_MS: 3000, AWAY_MS: 6000, LOBBY_AWAY_MS: 2000, KEEP_STARTED_MS: 4000, KEEP_IDLE_MS: 3000, VOTE_GUARD_MS: 400 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let failures = 0, passes = 0;
 function check(cond, msg, extra) {
@@ -222,7 +222,7 @@ async function main() {
     {
       const [a, b, c] = await newRoom(['A10', 'B10', 'C10']);
       await goOffline(c);
-      a.s.emit('end-game-vote', { confirm: true }); await sleep(150);
+      a.s.emit('end-game-vote', { confirm: true }); await sleep(T.VOTE_GUARD_MS + 150);
       b.s.emit('end-game-vote', { confirm: true }); await sleep(400);
       check(!a.room.finished, 'C 只是掉线（还没算离开）时不结算');
       await waitFor(() => a.room.finished, T.AWAY_MS + 2500);
@@ -246,7 +246,7 @@ async function main() {
     {
       const [a1, b1] = await newRoom(['G1A', 'G1B']);
       const [a2, b2] = await newRoom(['G2A', 'G2B']);
-      a1.s.emit('end-game-vote', { confirm: true }); await sleep(100); b1.s.emit('end-game-vote', { confirm: true });
+      a1.s.emit('end-game-vote', { confirm: true }); await sleep(T.VOTE_GUARD_MS + 150); b1.s.emit('end-game-vote', { confirm: true });
       await waitFor(() => a1.room.finished, 2000);
       await sleep(300);
       const res = await fetch(`${URL}/api/stats?pw=monopoly2024`).then(r => r.json());
@@ -296,6 +296,30 @@ async function main() {
       const meA = b.room.players.find(p => p.name === 'A15');
       check(meA && !meA.offline && meA.ready, '新连接的操作服务器照收，别人看到他在线', meA && { offline: meA.offline, ready: meA.ready });
       a2.close();
+    }
+
+    console.log('\n[16] 结算投票防误触：刚发起的一瞬间点到的"同意"不算；可以不同意、可以撤回');
+    {
+      const [a, b] = await newRoom(['A16', 'B16']);
+      a.s.emit('end-game-vote', { confirm: true });
+      await waitFor(() => b.room.endVote);
+      check(b.room.endVote && typeof b.room.endVote.at === 'number' && b.room.endVote.initiator === 'A16', '发起后，对方收到投票（带发起时间）', b.room.endVote);
+      b.s.emit('end-game-vote', { confirm: true });                        // 投票一弹出来就点到了"同意"
+      await sleep(250);
+      check(!a.room.finished && a.room.endVote && a.room.endVote.voters.length === 1, '发起后不到 0.4 秒的"同意"不算，游戏没结束', a.room.endVote);
+      b.s.emit('end-game-vote', { confirm: false }); await sleep(250);
+      check(!a.room.endVote && !a.room.finished && logHas(a, /B16 不同意结算/), '对方点"继续玩"：投票作废，游戏继续');
+      a.s.emit('end-game-vote', { confirm: true }); await sleep(250);
+      a.s.emit('end-game-vote', { confirm: false }); await sleep(250);
+      check(!b.room.endVote && !b.room.finished && logHas(b, /A16 撤回了结算投票/), '发起的人可以撤回');
+      a.s.emit('end-game-vote', { confirm: true }); await sleep(T.VOTE_GUARD_MS + 200);
+      b.s.emit('end-game-vote', { confirm: true });
+      await waitFor(() => a.room.finished, 2000);
+      check(a.room.finished && a.room.settled && !a.room.endVote, '看清之后再同意：正常结算');
+      await sleep(200);
+      const log = await fetch(`${URL}/api/netlog?pw=monopoly2024&n=5000`).then(r => r.text());
+      const acts = log.split('\n').filter(Boolean).map(l => JSON.parse(l)).filter(l => l.ev === 'vote' && l.room === a.code).map(l => l.act);
+      check(JSON.stringify(acts) === JSON.stringify(['start', 'too-fast', 'reject', 'start', 'withdraw', 'start', 'agree', 'settled']), '连接日志里记下了投票的每一步', acts);
     }
 
     console.log('\n[13] 连接日志');
